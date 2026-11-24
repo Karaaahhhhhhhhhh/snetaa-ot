@@ -3,6 +3,7 @@
    Noyau : données, référentiels, comptes, droits, navigation
    ========================================================= */
 'use strict';
+const APP_VERSION = '2026-11-24 n°10';
 
 /* ---------- Utilitaires ---------- */
 const $ = (s, r = document) => r.querySelector(s);
@@ -483,6 +484,7 @@ const UI = {
       h += `<a href="#/${r}" data-r="${r}"><span class="ico">${ico}</span>${esc(l)}${b ? `<span class="badge">${b}</span>` : ''}</a>`;
     });
     h += `<div class="navfoot"><img src="img/logo-fnec.png" alt="FNEC FP-FO"><span class="small">FNEC FP-FO<br>Force Ouvrière</span></div>`;
+    h += `<div class="small" style="padding:1rem;opacity:.55;font-size:.72rem">Version ${APP_VERSION}</div>`;
     $('#nav').innerHTML = h;
   },
   globalSearch(q) {
@@ -517,7 +519,11 @@ const App = {
     if (!D) { D = defaultDB(); }
     migrate(); await _saveNow();
     if (/[?&]code=/.test(location.search) && typeof Sauv !== 'undefined') await Sauv.retourOAuth();
-    if ('serviceWorker' in navigator && /^https?:/.test(location.protocol)) navigator.serviceWorker.register('sw.js').catch(() => { });
+    if ('serviceWorker' in navigator && /^https?:/.test(location.protocol)) {
+      const avait = !!navigator.serviceWorker.controller; let fait = false;
+      navigator.serviceWorker.addEventListener('controllerchange', () => { if (!avait || fait) return; fait = true; UI.toast('Nouvelle version de l\'application : rechargement…', 'g'); setTimeout(() => location.reload(), 900); });
+      navigator.serviceWorker.register('sw.js', { updateViaCache: 'none' }).then(r => r.update()).catch(() => { });
+    }
     window.addEventListener('hashchange', () => App.route());
     window.addEventListener('beforeunload', () => { if (D) Store.set('db', JSON.parse(JSON.stringify(D))); });
     const sid = sessionStorage.getItem('snetaa-session'); const u = sid && D.users.find(x => x.id === sid && x.actif !== false);
