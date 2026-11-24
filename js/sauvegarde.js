@@ -52,11 +52,12 @@ const Sauv = {
         <p><button class="btn sec sm" onclick="Params.exportExcel()">Exporter tout en Excel (lecture)</button></p></div></div>
       ${hist.length ? `<h2>Dernières sauvegardes</h2><div class="tablewrap"><table><tbody>${hist.map(h => `<tr><td>${fmtDT(h.d)}</td><td>${esc(h.dest)}</td><td>${h.chiffre ? '🔒 chiffrée' : 'non chiffrée'}</td><td class="small mut">${esc(userName(h.par))}</td></tr>`).join('')}</tbody></table></div>` : ''}
       <details class="card"><summary><b>Configurer Dropbox (une seule fois, 5 minutes)</b></summary><ol class="small">
-        <li>Va sur <a href="https://www.dropbox.com/developers/apps" target="_blank" rel="noopener">dropbox.com/developers/apps</a> → <b>Create app</b>.</li>
-        <li>Choisis <b>Scoped access</b> puis <b>App folder</b> (l'application n'aura accès qu'à son propre dossier, pas au reste de ton Dropbox). Nom : par exemple <i>SNETAA-OT-sauvegardes</i>.</li>
-        <li>Onglet <b>Permissions</b> : coche <code>files.content.write</code>, <code>files.content.read</code>, <code>files.metadata.read</code>, puis <b>Submit</b>.</li>
-        <li>Onglet <b>Settings</b> : dans <b>Redirect URIs</b>, ajoute exactement <code>${esc(location.origin + location.pathname)}</code> ; vérifie que « Allow public clients (Implicit Grant &amp; PKCE) » est sur <b>Allow</b>.</li>
-        <li>Copie l'<b>App key</b> et colle-la ci-dessus, puis clique sur « Connecter mon Dropbox ».</li></ol>
+        <li>Va sur <a href="https://www.dropbox.com/developers/apps" target="_blank" rel="noopener">dropbox.com/developers/apps</a> (l'espace développeurs) et clique sur <b>Créer une application</b> <span class="mut">(« Create app »)</span>.</li>
+        <li><b>1. Choisissez une API</b> : <b>Accès limité</b> <span class="mut">(« Scoped access »)</span>.<br><b>2. Choisissez le type d'accès</b> : <b>Dossier de l'application</b> <span class="mut">(« App folder »)</span> — l'application n'aura accès qu'à son propre dossier, pas au reste de ton Dropbox.<br><b>3. Nommez votre application</b> : par exemple <i>SNETAA-OT-sauvegardes</i>, coche l'acceptation des conditions puis <b>Créer l'application</b>.</li>
+        <li>Onglet <b>Autorisations</b> <span class="mut">(« Permissions »)</span> : coche <code>files.metadata.read</code>, <code>files.content.write</code> et <code>files.content.read</code>, puis clique sur <b>Envoyer</b> <span class="mut">(« Submit »)</span> en bas de page.</li>
+        <li>Onglet <b>Paramètres</b> <span class="mut">(« Settings »)</span>, rubrique <b>OAuth 2</b> :<br>– dans <b>URI de redirection</b> <span class="mut">(« Redirect URIs »)</span>, colle exactement <code>${esc(Sauv.adresseEnLigne())}</code> puis clique sur <b>Ajouter</b> <span class="mut">(« Add »)</span> ;<br>– vérifie que <b>Autoriser les clients publics</b> <span class="mut">(« Allow public clients (Implicit Grant &amp; PKCE) »)</span> est sur <b>Autoriser</b> <span class="mut">(« Allow »)</span>.</li>
+        <li>Toujours dans <b>Paramètres</b>, copie la <b>Clé de l'application</b> <span class="mut">(« App key »)</span> — pas le « secret » — colle-la ci-dessus, puis clique sur « Connecter mon Dropbox ».</li></ol>
+        ${location.protocol === 'file:' ? `<div class="alert small"><b>Important :</b> Dropbox refuse les adresses du type <code>file:///C:/…</code>. La connexion à Dropbox doit se faire depuis la <b>version en ligne</b> de l'application : <a href="${esc(Sauv.adresseEnLigne())}" target="_blank" rel="noopener">${esc(Sauv.adresseEnLigne())}</a>. Les données de la version locale et de la version en ligne sont séparées : fais d'abord une sauvegarde ici, puis « Restaurer une sauvegarde » dans la version en ligne, et utilise désormais celle-ci (installable avec son icône).</div>` : ''}
         <div class="f"><label>Nom donné à l'application Dropbox (pour l'affichage)</label><input value="${esc(D.meta.dropboxApp || '')}" onchange="D.meta.dropboxApp=this.value.trim();save()"></div></details>`;
     Sauv.majDossier();
   },
@@ -91,6 +92,7 @@ const Sauv = {
 
   /* ---------- Dropbox (OAuth PKCE, application à dossier dédié) ---------- */
   dbxEtat() { let t = null; try { t = JSON.parse(localStorage.getItem('snetaa-dbx') || 'null'); } catch (e) { } return { cle: D && D.meta.dropboxCle, connecte: !!(t && t.refresh), jeton: t }; },
+  adresseEnLigne() { return /^https?:/.test(location.protocol) ? location.origin + location.pathname : 'https://karaaahhhhhhhhhh.github.io/snetaa-ot/'; },
   redirect() { return location.origin + location.pathname; },
   b64url(buf) { return Crypto.b64(buf).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, ''); },
   async dbxConnecter() {
