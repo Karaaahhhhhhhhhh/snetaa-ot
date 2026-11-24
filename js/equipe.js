@@ -71,7 +71,7 @@ const Equipe = {
       <div class="kv"><div>Membres concernés</div><div>${mb.length ? mb.map(u => esc(u.prenom + ' ' + u.nom)).join(', ') : '<span class="mut">aucun membre invité pour l\'instant</span>'}</div>
         <div>Mot de passe d'équipe</div><div>${e.mdp ? `créé le ${fmtDT(e.cree)} <button class="btn sm sec" onclick="Equipe.afficher()">👁 Afficher / partager</button> <button class="btn sm ghost" onclick="Equipe.nouveauMdp()">↻ Nouveau mot de passe</button>` : `<button class="btn sm" onclick="Equipe.nouveauMdp()">Générer le mot de passe d'équipe</button>`}</div>
         <div>Dernière publication</div><div>${e.publie ? fmtDT(e.publie) + (e.mdpPublie && e.mdpPublie !== e.cree ? ' <span class="tag w">avec l\'ancien mot de passe : republie</span>' : '') : 'jamais'}</div>
-        <div>Lien de mise à jour</div><div class="small">${e.lien ? `<a href="${esc(e.lien)}" target="_blank" rel="noopener">${esc(e.lien.slice(0, 60))}…</a>` : '—'}</div>
+        <div>Lien de mise à jour</div><div class="small">${e.lien ? `<a href="${esc(e.lien)}" target="_blank" rel="noopener">${esc(e.lien.slice(0, 60))}…</a> <button class="btn sm sec" onclick="copyText(Equipe.etat().lien)">Copier pour le groupe WhatsApp</button>` : '—'}</div>
         <div>Dépôt des retours</div><div class="small">${e.depot ? `<a href="${esc(e.depot)}" target="_blank" rel="noopener">lien de dépôt actif</a>` : '—'}</div></div>
       <p>${dbx.connecte ? `<button class="btn" onclick="Equipe.publier()" ${mb.length ? '' : 'disabled'}>☁ Publier la mise à jour de l'équipe</button> <button class="btn sec" onclick="Equipe.recupererRetours()">⇩ Récupérer les retours déposés</button>` : '<span class="small mut">Connecte d\'abord Dropbox (ci-dessus).</span>'}</p>
       <p class="small mut">Les membres invités <b>avant le 24/11/2026</b> doivent recevoir une nouvelle invitation pour disposer de leur clé personnelle.</p></div>`;
@@ -156,7 +156,11 @@ const Equipe = {
       : '<p class="small">Ton invitation est antérieure à la mise à jour par Dropbox : demande une nouvelle invitation au secrétaire académique.</p>'}</div>`;
   },
   async telechargerMaj() {
-    const lien = D.meta.equipeLien;
+    let lien = D.meta.equipeLien;
+    if (!lien) {
+      const l = await UI.prompt('Lien de mise à jour', 'Colle le lien de mise à jour (publié par le secrétaire académique sur le groupe WhatsApp). Laisse vide si tu as déjà téléchargé le fichier.', '', 'text');
+      if (l == null) return null; if (/^https?:\/\//.test(l.trim())) { lien = D.meta.equipeLien = l.trim(); await _saveNow(); }
+    }
     if (lien) { try { const r = await fetch(Equipe.direct(lien)); if (r.ok) { const t = await r.text(); if (/snetaaEnc/.test(t)) return t; } } catch (e) { } }
     const ok = await UI.modal('Récupérer le fichier', `<p>Le fichier n'a pas pu être récupéré automatiquement.</p><ol><li>${lien ? `<a href="${esc(Equipe.direct(lien))}" target="_blank" rel="noopener">Clique ici pour le télécharger</a>` : 'Demande le lien du fichier de mise à jour au secrétaire académique'}</li><li>Puis choisis le fichier téléchargé (mise-a-jour-equipe.snetaa).</li></ol>`, [{ label: 'Annuler', value: false }, { label: 'Choisir le fichier', value: true }]);
     if (!ok) return null;
