@@ -362,7 +362,7 @@ const Auth = {
     if (!D.users.length) {
       box.innerHTML = `<div class="loginbox">${logos}<h1>Première ouverture</h1><p class="mut small">Création du compte administrateur principal. Les données restent sur cet appareil.</p>
       <div class="frow"><div class="f"><label>Prénom</label><input id="su_prenom" value="Christophe"></div><div class="f"><label>Nom</label><input id="su_nom" value="DENAGE"></div></div>
-      <div class="f"><label>Courriel</label><input id="su_mail" value="capa@snetaaot.org"></div>
+      <div class="f"><label>Courriel de connexion (personnel de préférence)</label><input id="su_mail" type="email" placeholder="prenom.nom@exemple.fr"></div>
       <div class="frow"><div class="f"><label>Code personnel (6 à 10 chiffres)</label><input id="su_pin" type="password" inputmode="numeric"></div><div class="f"><label>Confirmer</label><input id="su_pin2" type="password" inputmode="numeric"></div></div>
       <button class="btn" style="width:100%;justify-content:center" onclick="Auth.setup()">Créer et entrer</button>
       <p class="small mut" style="margin-top:1rem">Vous avez déjà une sauvegarde ? <a href="#" onclick="Params.restaurer();return false">Restaurer une sauvegarde</a></p>
@@ -371,15 +371,16 @@ const Auth = {
     }
     const users = D.users.filter(u => u.actif !== false && u.pin);
     box.innerHTML = `<div class="loginbox">${logos}<h1 style="text-align:center">Gestion syndicale</h1><p class="mut small" style="text-align:center">Orléans-Tours</p>
-      <div class="f"><label>Utilisateur</label><select id="li_user">${users.map(u => `<option value="${u.id}" ${u.id === localStorage.getItem('snetaa-lastuser') ? 'selected' : ''}>${esc(u.prenom + ' ' + u.nom)} — ${esc(Droits.libelle(u))}</option>`).join('')}</select></div>
-      <div class="f"><label>Code PIN</label><input id="li_pin" type="password" inputmode="numeric" autocomplete="current-password" onkeydown="if(event.key==='Enter')Auth.login()"></div>
+      <div class="f"><label>Courriel</label><input id="li_user" type="email" autocomplete="username" value="${esc(localStorage.getItem('snetaa-lastmail') || ((users.find(u => u.id === localStorage.getItem('snetaa-lastuser')) || {}).email) || '')}" onkeydown="if(event.key==='Enter')$('#li_pin').focus()"></div>
+      <div class="f"><label>Code personnel</label><input id="li_pin" type="password" inputmode="numeric" autocomplete="current-password" onkeydown="if(event.key==='Enter')Auth.login()"></div>
       <button class="btn" style="width:100%;justify-content:center" onclick="Auth.login()">Entrer</button>
       <p class="small mut" style="margin-top:1rem;text-align:center"><a href="#" onclick="Params.restaurer();return false">Restaurer une sauvegarde</a> · <a href="#" onclick="Auth.importPaquet();return false">Ouvrir un paquet militant</a></p>
       <p style="text-align:center"><button class="btn sec sm" onclick="Secu.ouvrir()">✉ J'ai reçu une invitation</button></p></div>`;
-    setTimeout(() => $('#li_pin') && $('#li_pin').focus(), 50);
+    setTimeout(() => { const f = $('#li_user') && $('#li_user').value ? $('#li_pin') : $('#li_user'); f && f.focus(); }, 50);
   },
   async setup() {
     const pin = $('#su_pin').value.trim();
+    if (!/^[^@\s]+@[^@\s]+\.[a-z]{2,}$/i.test($('#su_mail').value.trim())) return UI.toast('Indique ton courriel de connexion', 'r');
     const errp = Secu.pinValide(pin); if (errp) return UI.toast(errp, 'r');
     if (pin !== $('#su_pin2').value.trim()) return UI.toast('Les deux PIN diffèrent', 'r');
     const salt = uid();
@@ -388,14 +389,14 @@ const Auth = {
     log('Création du compte administrateur', userName(u.id));
   },
   async login() {
-    const u = D.users.find(x => x.id === $('#li_user').value); const pin = $('#li_pin').value.trim();
-    if (!u) return;
+    const u = Compte.trouver($('#li_user').value); const pin = $('#li_pin').value.trim();
+    if (!u) { $('#li_pin').value = ''; return UI.toast('Courriel ou code incorrect', 'r'); }
     const bl = Secu.bloque(u); if (bl) { $('#li_pin').value = ''; return UI.modal('Accès suspendu', `<p>${esc(bl)}</p>`, [{ label: 'OK' }]); }
     if (await Auth.hashPin(pin, u.salt) !== u.pin) {
       $('#li_pin').value = ''; const n = await Secu.echec(u);
       return UI.toast(n >= 5 ? 'Code incorrect — accès suspendu temporairement' : `Code incorrect (${n} essai${n > 1 ? 's' : ''} sur 5 avant suspension)`, 'r');
     }
-    Secu.reussite(u); localStorage.setItem('snetaa-lastuser', u.id);
+    Secu.reussite(u); localStorage.setItem('snetaa-lastuser', u.id); if (u.email) localStorage.setItem('snetaa-lastmail', u.email);
     if (u.pinProvisoire || (u.pinLong || 0) < 6) await Secu.imposerChangement(u);
     Auth.enter(u); log('Connexion');
   },
@@ -443,7 +444,7 @@ const UI = {
   },
   toggleNav() { $('#nav').classList.toggle('open'); },
   renderUser() {
-    $('#userbox').innerHTML = `<div class="avatar">${esc((ME.prenom || '?')[0] + (ME.nom || '?')[0])}</div><div class="uname">${esc(ME.prenom + ' ' + ME.nom)}<br><span class="mut">${esc(Droits.libelle(ME))}</span></div><button class="btn sm sec" onclick="Auth.logout()" title="Se déconnecter">⏻</button>`;
+    $('#userbox').innerHTML = `<div class="avatar">${esc((ME.prenom || '?')[0] + (ME.nom || '?')[0])}</div><div class="uname" style="cursor:pointer" title="Mon compte" onclick="Compte.ouvrir()">${esc(ME.prenom + ' ' + ME.nom)}<br><span class="mut">${esc(Droits.libelle(ME))}</span></div><button class="btn sm sec" onclick="Auth.logout()" title="Se déconnecter">⏻</button>`;
   },
   navItems() {
     const n = [];
@@ -548,6 +549,7 @@ App.routes[''] = function () {
   let h = `<div class="pagehead"><div><h1>Bonjour ${esc(ME.prenom)}</h1><div class="mut">${new Date().toLocaleDateString('fr-FR', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}</div></div></div>`;
   if (can('adm.sauvegarde') && (backupAge === null || backupAge > 7) && D.personnes.length)
     h += `<div class="alert w"><b>Sauvegarde :</b> ${backupAge === null ? 'aucune sauvegarde faite' : 'dernière sauvegarde il y a ' + backupAge + ' jours'}. Les données sont stockées dans ce navigateur : sauvegarde régulièrement. <a href="#/sauvegarde">Sauvegarder maintenant</a></div>`;
+  if (!ME.pid && D.personnes.length) h += `<div class="alert w"><b>Ton compte n'est pas relié à ta fiche adhérent.</b> <a href="#" onclick="Compte.ouvrir();return false">Le relier et choisir ton courriel de connexion</a></div>`;
   h += `<div class="alert"><b>Élections professionnelles :</b> ${elec}</div>`;
   const uaiInc = Array.from(new Set(D.personnes.flatMap(P.uais))).filter(u => /^\d{7}[A-Z]$/.test(u) && !D.etablissements.some(e => e.uai === u)).length;
   if (uaiInc && can('adm.params')) h += `<div class="alert w"><b>${uaiInc} établissement(s)</b> de ton fichier (collèges, SEGPA, EREA…) ne sont pas encore identifiés. <a href="#" onclick="Etabs.annuaire();return false">Les récupérer dans l'annuaire officiel</a> (connexion internet).</div>`;

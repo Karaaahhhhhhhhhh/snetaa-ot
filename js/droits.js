@@ -68,7 +68,7 @@ const Droits = {
     D.users.push(u); save(); log('Accès créé', P.full(p) + ' (' + Droits.libelle(u) + ')'); UI.renderNav();
     App.route(); Secu.inviter(u.id);
   },
-  relier(pid) { const id = $('#dr_lien').value; const u = D.users.find(x => x.id === id); if (!u) return; u.pid = pid; save(); log('Compte relié à une fiche', u.prenom + ' ' + u.nom); Droits.rafraichir(); UI.renderNav(); App.route(); },
+  relier(pid) { const id = $('#dr_lien').value; const u = D.users.find(x => x.id === id); if (!u) return; u.pid = pid; const pf = P.get(pid); if (pf) { u.prenom = pf.prenom || u.prenom; u.nom = (pf.nom || u.nom).toUpperCase(); } save(); log('Compte relié à une fiche', u.prenom + ' ' + u.nom); Droits.rafraichir(); UI.renderNav(); App.route(); },
   async delier(id) { const u = D.users.find(x => x.id === id); if (!await UI.confirm('Délier le compte de cette fiche ? Il perd les droits liés aux mandats.', 'Délier')) return; u.pid = null; save(); App.route(); },
   setRole(id, r) { const u = D.users.find(x => x.id === id); u.role = r; save(); log('Rôle modifié', u.prenom + ' ' + u.nom + ' → ' + r); Droits.rafraichir(); UI.renderNav(); App.route(); },
   basculer(id, k, on) {

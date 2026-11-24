@@ -148,7 +148,7 @@ const Secu = {
     D.journal.unshift({ d: nowISO(), u: user.id, a: 'Activation de l\'invitation', x: inv.personnes.length + ' fiches' });
     await _saveNow();
     const conf = await Secu.empreinte(inv.id, inv.secret, 'activation');
-    await UI.modal('Accès activé', `<p>Bienvenue ${esc(user.prenom)} ! Ton accès est prêt sur cet appareil.</p><p>Communique ce <b>code de confirmation</b> à ${esc(inv.de)} (par téléphone ou SMS) pour finaliser la vérification :</p><p style="font-size:2rem;letter-spacing:.2em;font-weight:700;color:var(--navy);text-align:center">${conf}</p>`, [{ label: 'C\'est noté, entrer' }]);
+    await UI.modal('Accès activé', `<p>Bienvenue ${esc(user.prenom)} ! Ton accès est prêt sur cet appareil.</p><p>Communique ce <b>code de confirmation</b> à ${esc(inv.de)} (par téléphone ou SMS) pour finaliser la vérification :</p><p style="font-size:2rem;letter-spacing:.2em;font-weight:700;color:var(--navy);text-align:center">${conf}</p><p class="small">Pour te connecter ensuite : ${user.email ? 'ton courriel <b>' + esc(user.email) + '</b>' : 'tes prénom et nom'} et ton code personnel.</p>`, [{ label: 'C\'est noté, entrer' }]);
     localStorage.setItem('snetaa-lastuser', user.id); Auth.enter(user);
   },
   /* changement de code imposé (code provisoire ou trop court) */
