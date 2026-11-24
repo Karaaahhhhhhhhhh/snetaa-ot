@@ -58,8 +58,8 @@ const Comm = {
   },
   page() {
     const ed = can('com.modeles');
-    const cats = { elections: 'Élections', adhesion: 'Adhésion & fichier', general: 'Général' };
-    $('#main').innerHTML = `<div class="pagehead"><div><h1>Mails & SMS types</h1><div class="mut small">Variables disponibles : ${Comm.VARS.map(v => '<code>{' + v[0] + '}</code>').join(' ')}</div></div><div class="actions">${ed ? `<button class="btn" onclick="Comm.edit()">+ Nouveau modèle</button>` : ''}</div></div>
+    const cats = Object.assign({}, Comm.CATS); D.modeles.forEach(m => { if (m.cat && !cats[m.cat]) cats[m.cat] = m.cat; });
+    $('#main').innerHTML = `<div class="pagehead"><div><h1>Mails & SMS types</h1><div class="mut small">Variables disponibles : ${Comm.VARS.map(v => '<code>{' + v[0] + '}</code>').join(' ')}</div></div><div class="actions">${ed ? `<button class="btn sec" onclick="Comm.importer()">⇪ Importer des modèles</button> <button class="btn sec" onclick="Comm.exporter()">⇩ Exporter</button> <button class="btn" onclick="Comm.edit()">+ Nouveau modèle</button>` : ''}</div></div>
       <div class="alert small">Pour envoyer : sélectionne des personnes dans le <a href="#/votants">cahier de votants</a>, le <a href="#/adherents">fichier adhérents</a> ou la page <a href="#/emargement">Qui a voté ?</a>, puis « Mail / SMS type ».</div>
       ${Object.entries(cats).map(([c, l]) => { const ms = D.modeles.filter(m => (m.cat || 'general') === c); return ms.length ? `<h2>${l}</h2><div class="grid g2">${ms.map(m => `<div class="card"><div style="display:flex;gap:.5rem;align-items:center"><span class="tag ${m.canal === 'sms' ? 'w' : 'v'}">${m.canal === 'sms' ? 'SMS' : 'Mail'}</span><b>${esc(m.nom)}</b>
         <span style="margin-left:auto">${ed ? `<button class="btn sm ghost" onclick="Comm.edit('${m.id}')">Modifier</button><button class="btn sm ghost" onclick="Comm.dupliquer('${m.id}')">Dupliquer</button><button class="btn sm ghost" onclick="Comm.suppr('${m.id}')">✕</button>` : ''}</span></div>
@@ -67,10 +67,73 @@ const Comm = {
   },
   edit(id) {
     const m = id ? D.modeles.find(x => x.id === id) : { canal: 'mail', cat: 'elections', nom: '', objet: '[SNETAA-FO] ', corps: 'Bonjour {prenom},\n\n\n\nBien syndicalement,\n\n{signature}' };
-    UI.modal(id ? 'Modifier le modèle' : 'Nouveau modèle', `<div class="frow"><div class="f"><label>Nom du modèle</label><input id="mo_n" value="${esc(m.nom)}"></div><div class="f"><label>Type</label><select id="mo_c">${UI.opts([['mail', 'Mail'], ['sms', 'SMS']], m.canal)}</select></div><div class="f"><label>Rubrique</label><select id="mo_cat">${UI.opts([['elections', 'Élections'], ['adhesion', 'Adhésion & fichier'], ['general', 'Général']], m.cat)}</select></div></div>
+    UI.modal(id ? 'Modifier le modèle' : 'Nouveau modèle', `<div class="frow"><div class="f"><label>Nom du modèle</label><input id="mo_n" value="${esc(m.nom)}"></div><div class="f"><label>Type</label><select id="mo_c">${UI.opts([['mail', 'Mail'], ['sms', 'SMS']], m.canal)}</select></div><div class="f"><label>Rubrique</label><select id="mo_cat">${UI.opts(Object.entries(Comm.CATS), m.cat)}</select></div></div>
       <div class="f"><label>Objet (mail)</label><input id="mo_o" value="${esc(m.objet || '')}"></div><div class="f"><label>Texte</label><textarea id="mo_t" style="min-height:260px" oninput="document.getElementById('mo_len').textContent=this.value.length+' caractères'">${esc(m.corps)}</textarea><span id="mo_len" class="small mut"></span></div>
       <div class="pill-select">${Comm.VARS.map(v => `<button type="button" onclick="const t=document.getElementById('mo_t');t.setRangeText('{${v[0]}}',t.selectionStart,t.selectionEnd,'end');t.focus()">${esc(v[1])}</button>`).join('')}</div>`,
       [{ label: 'Annuler' }, { label: 'Enregistrer', onClick: md => { Object.assign(m, { nom: md.querySelector('#mo_n').value || 'Sans titre', canal: md.querySelector('#mo_c').value, cat: md.querySelector('#mo_cat').value, objet: md.querySelector('#mo_o').value, corps: md.querySelector('#mo_t').value }); if (!id) { m.id = uid(); D.modeles.push(m); } save(); log('Modèle enregistré', m.nom); App.route(); } }], { wide: true });
+  },
+  /* ---------- Import / export de modèles ---------- */
+  CATS: { elections: 'Élections', adhesion: 'Adhésion & fichier', reunions: 'Réunions & instances', info: 'Information des collègues', militants: 'Messages aux militants', general: 'Général' },
+  exporter(ids) {
+    const l = D.modeles.filter(m => !ids || ids.includes(m.id)).map(m => ({ id: m.id, canal: m.canal, cat: m.cat, nom: m.nom, objet: m.objet || '', corps: m.corps }));
+    download('modeles_SNETAA-FO_' + todayISO() + '.json', JSON.stringify({ type: 'snetaa-modeles', version: 1, date: nowISO(), modeles: l }, null, 2), 'application/json');
+  },
+  /* lit le format JSON ou le format texte « === MODELE === » */
+  lire(txt) {
+    txt = String(txt || '').replace(/^\uFEFF/, '').trim();
+    if (/^[\[{]/.test(txt)) {
+      const o = JSON.parse(txt); const l = Array.isArray(o) ? o : (o.modeles || [o]);
+      return l.map(m => ({ id: m.id, canal: m.canal || m.type, cat: m.cat || m.rubrique, nom: m.nom, objet: m.objet, corps: m.corps || m.texte }));
+    }
+    const l = [];
+    txt.split(/^={3,}\s*MOD[EÈ]LE\s*={3,}\s*$/mi).slice(1).forEach(bloc => {
+      bloc = bloc.split(/^={3,}\s*FIN\s*={3,}\s*$/mi)[0];
+      const i = bloc.search(/^-{3,}\s*$/m); if (i < 0) return;
+      const tete = bloc.slice(0, i), corps = bloc.slice(i).replace(/^-{3,}\s*\n?/, '').replace(/\s+$/, '');
+      const m = { corps };
+      tete.split('\n').forEach(li => { const r = li.match(/^\s*([a-zé]+)\s*:\s*(.*)$/i); if (r) m[norm(r[1]).replace(/ /g, '')] = r[2].trim(); });
+      l.push({ id: m.id, canal: m.type || m.canal, cat: m.rubrique || m.cat, nom: m.nom, objet: m.objet, corps });
+    });
+    return l;
+  },
+  normaliser(m) {
+    const canal = /sms|texto|whats/i.test(m.canal || '') ? 'sms' : 'mail';
+    let cat = norm(m.cat || 'general').replace(/ /g, '');
+    const alias = { election: 'elections', elections: 'elections', vote: 'elections', adhesion: 'adhesion', adhesions: 'adhesion', cotisation: 'adhesion', reunion: 'reunions', reunions: 'reunions', instance: 'reunions', information: 'info', info: 'info', militant: 'militants', militants: 'militants', general: 'general' };
+    cat = alias[cat] || 'general';
+    let objet = canal === 'mail' ? String(m.objet || '').trim() : '';
+    if (canal === 'mail' && !/^\[SNETAA-FO\]/.test(objet)) objet = '[SNETAA-FO] ' + objet;
+    const id = String(m.id || norm(m.nom || 'modele').replace(/ /g, '-')).slice(0, 60);
+    return { id, canal, cat, nom: String(m.nom || 'Modèle importé').trim(), objet, corps: String(m.corps || '').replace(/\r\n/g, '\n') };
+  },
+  inconnues(m) { const ok = new Set(Comm.VARS.map(v => v[0])); return Array.from(new Set(((m.objet || '') + ' ' + m.corps).match(/\{([a-z_]+)\}/g) || [])).map(x => x.slice(1, -1)).filter(x => !ok.has(x)); },
+  async importer() {
+    const r = await UI.modal('Importer des modèles', `<p class="small">Choisis un fichier de modèles (<code>.json</code> ou <code>.txt</code>) <b>ou</b> colle directement le texte reçu (par exemple préparé par Claude).</p>
+      <p><button class="btn sec" onclick="pickFile('.json,.txt').then(f=>f&&readFile(f,'text')).then(t=>{if(t)document.getElementById('im_t').value=t})">Choisir un fichier…</button></p>
+      <div class="f"><textarea id="im_t" style="min-height:220px;font-family:monospace;font-size:.8rem" placeholder="=== MODELE ===
+nom: …
+type: mail
+rubrique: elections
+objet: [SNETAA-FO] …
+---
+Bonjour {prenom},
+…
+=== FIN ==="></textarea></div>`,
+      [{ label: 'Annuler', value: null }, { label: 'Analyser', onClick: m => m.querySelector('#im_t').value }], { wide: true });
+    if (!r) return;
+    let l; try { l = Comm.lire(r).filter(m => m.corps).map(Comm.normaliser); } catch (e) { return UI.toast('Texte illisible : ' + e.message, 'r'); }
+    if (!l.length) return UI.toast('Aucun modèle trouvé dans ce texte', 'r');
+    Comm._imp = l;
+    UI.modal(l.length + ' modèle(s) trouvé(s)', `<div class="tablewrap" style="max-height:55vh"><table><thead><tr><th></th><th>Modèle</th><th>Type</th><th>Rubrique</th><th>Remarques</th></tr></thead><tbody>${l.map((m, i) => {
+        const ex = D.modeles.find(x => x.id === m.id); const inc = Comm.inconnues(m); const len = Comm.remplir(m.corps, null).length;
+        return `<tr><td><input type="checkbox" class="im_c" data-i="${i}" checked></td><td><b>${esc(m.nom)}</b>${m.objet ? `<div class="small mut">${esc(m.objet)}</div>` : ''}</td><td>${m.canal === 'sms' ? 'SMS' : 'Mail'}</td><td class="small">${esc(Comm.CATS[m.cat])}</td>
+          <td class="small">${ex ? '<span class="tag w">remplace « ' + esc(ex.nom) + ' »</span> ' : '<span class="tag ok">nouveau</span> '}${inc.length ? '<span class="tag ko">variables inconnues : ' + esc(inc.join(', ')) + '</span> ' : ''}${m.canal === 'sms' ? len + ' car. (≈ ' + Math.ceil(len / 160) + ' SMS)' : ''}</td></tr>`; }).join('')}</tbody></table></div>
+      <label class="chk"><input type="checkbox" id="im_keep"> Garder aussi les anciennes versions (ajouter en copie au lieu de remplacer)</label>`,
+      [{ label: 'Annuler', value: null }, { label: 'Importer', onClick: md => {
+        const keep = md.querySelector('#im_keep').checked; let n = 0;
+        $$('.im_c', md).filter(c => c.checked).forEach(c => { const m = Object.assign({}, Comm._imp[+c.dataset.i]); const i = D.modeles.findIndex(x => x.id === m.id);
+          if (i >= 0 && !keep) D.modeles[i] = m; else { if (i >= 0) { m.id = uid(); m.nom += ' (importé)'; } D.modeles.push(m); } n++; });
+        save(); log('Modèles importés', n + ' modèle(s)'); UI.toast(n + ' modèle(s) importé(s)', 'g'); App.route(); } }], { wide: true });
   },
   dupliquer(id) { const m = D.modeles.find(x => x.id === id); D.modeles.push(Object.assign({}, m, { id: uid(), nom: m.nom + ' (copie)' })); save(); App.route(); },
   async suppr(id) { if (!await UI.confirm('Supprimer ce modèle ?', 'Supprimer')) return; D.modeles = D.modeles.filter(x => x.id !== id); save(); App.route(); },
