@@ -381,7 +381,8 @@ const Adh = {
     }
     const to = [M.mailNational, M.mailsAcademies[acad]].filter(Boolean).join(',');
     const body = Adh.natMailBody(p, txt);
-    UI.modal('Mail au national et à l\'académie', `${!M.mailNational ? '<div class="alert w">Adresse du national non renseignée : <a href="#/params" onclick="UI.close()">Paramètres</a>.</div>' : ''}${!M.mailsAcademies[acad] ? `<div class="alert w">Adresse de la section ${esc(acad)} non renseignée (Paramètres → Adresses des académies).</div>` : ''}
+    const sec = typeof Sections !== 'undefined' && Sections.de(acad);
+    UI.modal('Mail au national et à l\'académie', `${sec ? `<div class="alert small">Section ${esc(sec.academie)} : <b>${esc(sec.responsables || '')}</b> · ${esc(sec.mail || '')} · ${esc(sec.tel || '')}</div>` : ''}${!M.mailNational ? '<div class="alert w">Adresse du national non renseignée : <a href="#/params" onclick="UI.close()">Paramètres</a>.</div>' : ''}${!M.mailsAcademies[acad] ? `<div class="alert w">Adresse de la section ${esc(acad)} non renseignée (Paramètres → Adresses des académies).</div>` : ''}
       <div class="f"><label>Destinataires</label><input id="ma_to" value="${esc(to)}"></div><div class="f"><label>Copie</label><input id="ma_cc" value="${esc(M.ccNational || '')}"></div><div class="f"><label>Objet</label><input id="ma_s" value="${esc(subj)}"></div><div class="f"><label>Message</label><textarea id="ma_b" style="min-height:260px">${esc(body)}</textarea></div>`,
       [{ label: 'Fermer' }, { label: 'Copier le texte', onClick: m => { copyText(m.querySelector('#ma_b').value); return false; } },
       {

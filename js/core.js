@@ -3,7 +3,7 @@
    Noyau : données, référentiels, comptes, droits, navigation
    ========================================================= */
 'use strict';
-const APP_VERSION = '2026-11-24 n°18';
+const APP_VERSION = '2026-11-24 n°19';
 
 /* ---------- Utilitaires ---------- */
 const $ = (s, r = document) => r.querySelector(s);
@@ -467,6 +467,7 @@ const UI = {
     n.push(['publications', 'Publications & adhésion', '📰', 'com.envoyer', 'Communication']);
     n.push(['reunions', 'Réunions & présences', '◷', 'reu.voir', 'Vie syndicale']);
     n.push(['mandats', 'Mandats S1 / S2 / S3', '★', 'adh.voir', 'Vie syndicale']);
+    n.push(['sections', 'Sections académiques', '☎', 'adh.voir', 'Vie syndicale']);
     n.push(['etabs', 'Établissements', '🏫', 'adh.voir', 'Vie syndicale']);
     n.push(['carte', 'Carte & déplacements', '🗺', 'adh.voir', 'Vie syndicale']);
     n.push(['frais', 'Déclarations de frais', '🧾', 'frais.saisir', 'Finances', () => can('frais.valider') ? D.frais.filter(f => f.statut === 'soumise').length : 0]);
