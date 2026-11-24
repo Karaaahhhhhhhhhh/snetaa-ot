@@ -404,6 +404,7 @@ const Auth = {
     ME = u; Droits.rafraichir(); sessionStorage.setItem('snetaa-session', u.id);
     $('#login').classList.add('hidden'); $('#app').classList.remove('hidden');
     UI.renderNav(); UI.renderUser(); App.route(); Auth.armLock();
+    if (typeof Sauv !== 'undefined') setTimeout(() => Sauv.verifierAuDemarrage(), 1200);
   },
   logout() { log('Déconnexion'); ME = null; sessionStorage.removeItem('snetaa-session'); location.hash = ''; Auth.render(); },
   armLock() {

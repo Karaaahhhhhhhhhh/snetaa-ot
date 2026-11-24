@@ -283,7 +283,7 @@ const Params = {
   async _appliquer(o) {
     if (!o || !o.meta || !Array.isArray(o.personnes) || !Array.isArray(o.users)) return UI.toast('Ce fichier n\'est pas une sauvegarde de l\'application', 'r');
     if (D.users.length && !await UI.confirm(`Remplacer toutes les données actuelles par la sauvegarde du ${fmtDT(o.meta.lastBackup)} (${o.personnes.length} fiches) ?`, 'Restaurer')) return;
-    D = o; migrate(); await _saveNow(); sessionStorage.removeItem('snetaa-session'); UI.toast('Sauvegarde restaurée : reconnecte-toi', 'g'); ME = null; Auth.render();
+    D = o; migrate(); await _saveNow(); sessionStorage.removeItem('snetaa-session'); UI.toast('Sauvegarde restaurée : reconnecte-toi', 'g'); ME = null; Auth.render(); return true;
   },
   exportExcel() {
     exportXLSX('SNETAA-FO_OT_export_' + todayISO() + '.xlsx', {

@@ -4,7 +4,39 @@
    ========================================================= */
 'use strict';
 const Sauv = {
-  nomFichier() { const d = new Date(); return `sauvegarde_SNETAA-FO_OT_${todayISO()}_${pad2(d.getHours())}h${pad2(d.getMinutes())}.snetaa`; },
+  nomFichier() { const d = new Date(); return `sauvegarde_SNETAA-FO_OT_${todayISO()}_${pad2(d.getHours())}h${pad2(d.getMinutes())}_${Sauv.appareil()}.snetaa`; },
+  appareil() { return /Android|iPhone|iPad|Mobi/i.test(navigator.userAgent) ? 'telephone' : 'ordinateur'; },
+  appareilDe(nom) { const m = /_(telephone|ordinateur)\.snetaa$/.exec(nom || ''); return m ? (m[1] === 'telephone' ? 'téléphone' : 'ordinateur') : ''; },
+
+  /* ---------- Cohérence entre appareils (Dropbox) ---------- */
+  sync() { try { return JSON.parse(localStorage.getItem('snetaa-sync') || 'null'); } catch (e) { return null; } },
+  async empreinte() { return Crypto.hash(JSON.stringify([D.personnes, D.users.map(u => Object.assign({}, u, { pin: '', salt: '' })), D.reunions, D.frais, D.treso, D.modeles, D.publications, D.etablissements.filter(e => e.manuel), D.mandats || null])); },
+  async marquerSync(nom, srv) { localStorage.setItem('snetaa-sync', JSON.stringify({ nom, srv, at: nowISO(), h: await Sauv.empreinte() })); },
+  async derniereDistante() {
+    const r = await fetch('https://api.dropboxapi.com/2/files/list_folder', { method: 'POST', headers: { Authorization: 'Bearer ' + await Sauv.jeton(), 'Content-Type': 'application/json' }, body: JSON.stringify({ path: '' }) });
+    const j = await r.json(); return (j.entries || []).filter(e => e['.tag'] === 'file' && /\.snetaa$/.test(e.name)).sort((a, b) => a.server_modified < b.server_modified ? 1 : -1)[0] || null;
+  },
+  /* la sauvegarde la plus récente sur Dropbox vient-elle d'ailleurs (plus récente que la copie de cet appareil) ? */
+  plusRecente(d) {
+    if (!d) return false; const s = Sauv.sync();
+    if (s) return d.name !== s.nom && d.server_modified > s.srv;
+    const lb = D.meta.lastBackup ? new Date(new Date(D.meta.lastBackup).getTime() + 120000).toISOString() : '';
+    return d.server_modified > lb;
+  },
+  async modifsLocales() { const s = Sauv.sync(); return s ? (await Sauv.empreinte()) !== s.h : null; },
+  async verifierAuDemarrage() {
+    try {
+      if (!Sauv.dbxEtat().connecte || !can('adm.sauvegarde')) return;
+      const d = await Sauv.derniereDistante(); if (!Sauv.plusRecente(d)) return;
+      const loc = await Sauv.modifsLocales(), app = Sauv.appareilDe(d.name);
+      const r = await UI.modal('Sauvegarde plus récente sur Dropbox', `<p>Une sauvegarde plus récente que les données de cet appareil existe sur Dropbox :</p>
+        <p style="text-align:center"><b>${fmtDT(d.server_modified)}</b>${app ? ' · faite depuis un <b>' + app + '</b>' : ''}<br><span class="small mut">${esc(d.name)}</span></p>
+        ${loc ? '<div class="alert w small"><b>Attention :</b> cet appareil contient des modifications qui ne sont pas sur Dropbox. Les reprendre les remplacerait. Si elles comptent, choisis « Plus tard », note-les, puis reprends la sauvegarde.</div>' : loc === false ? '<p class="small">Cet appareil n\'a pas été modifié depuis sa dernière synchronisation : tu peux la reprendre sans rien perdre.</p>' : ''}
+        <p class="small">Conseil : reprends-la avant de travailler, pour partir des données les plus à jour.</p>`,
+        [{ label: 'Plus tard', value: false }, { label: 'Reprendre cette sauvegarde', value: true }]);
+      if (r) Sauv._restaurerDbx(d.path_lower, d);
+    } catch (e) { /* hors ligne ou Dropbox indisponible : rien à faire */ }
+  },
   /* mot de passe : facultatif (téléchargement / dossier local), obligatoire pour le cloud */
   async motDePasse(obligatoire, titre) {
     return UI.modal(titre || 'Mot de passe de chiffrement', `${obligatoire ? '<div class="alert w small"><b>Chiffrement obligatoire</b> : la sauvegarde part sur un service en ligne. Sans ce mot de passe, elle sera illisible, y compris pour toi : note-le en lieu sûr.</div>' : '<p class="small mut">Recommandé. Laisse vide pour une sauvegarde non chiffrée.</p>'}
@@ -122,11 +154,22 @@ const Sauv = {
     t.access = j.access_token; t.exp = Date.now() + (j.expires_in - 60) * 1000; localStorage.setItem('snetaa-dbx', JSON.stringify(t)); return t.access;
   },
   async versDropbox() {
+    try {
+      const d = await Sauv.derniereDistante();
+      if (Sauv.plusRecente(d)) {
+        const app = Sauv.appareilDe(d.name);
+        const c = await UI.modal('Sauvegarde plus récente sur Dropbox', `<p>Une sauvegarde <b>plus récente</b> que les données de cet appareil existe déjà : <b>${fmtDT(d.server_modified)}</b>${app ? ' (depuis un ' + app + ')' : ''}.</p>
+          <p>Si tu sauvegardes maintenant, ta version deviendra la plus récente, et <b>les modifications faites sur l'autre appareil n'y seront pas</b> (elles resteront dans l'ancienne sauvegarde, sur Dropbox).</p>`,
+          [{ label: 'Annuler', value: null }, { label: 'Reprendre la plus récente', value: 'reprendre' }, { label: 'Sauvegarder quand même', value: 'forcer' }]);
+        if (!c) return; if (c === 'reprendre') return Sauv._restaurerDbx(d.path_lower, d);
+      }
+    } catch (e) { }
     const pass = await Sauv.motDePasse(true, 'Sauvegarde Dropbox — mot de passe obligatoire'); if (!pass) return;
     try {
       UI.toast('Envoi vers Dropbox…');
       const r = await fetch('https://content.dropboxapi.com/2/files/upload', { method: 'POST', headers: { Authorization: 'Bearer ' + await Sauv.jeton(), 'Content-Type': 'application/octet-stream', 'Dropbox-API-Arg': JSON.stringify({ path: '/' + Sauv.nomFichier(), mode: 'add', autorename: true }) }, body: await Sauv.contenu(pass) });
       if (!r.ok) throw new Error('réponse ' + r.status);
+      const meta = await r.json(); await Sauv.marquerSync(meta.name, meta.server_modified);
       UI.toast('Sauvegarde chiffrée envoyée sur Dropbox', 'g'); Sauv.fin('Dropbox', true);
       if (typeof Equipe !== 'undefined' && can('adm.users') && Equipe.membres().length && await UI.confirm('Publier aussi la mise à jour pour les membres de l\'équipe (' + Equipe.membres().length + ') ?', 'Publier')) Equipe.publier();
     } catch (e) { UI.toast('Échec de l\'envoi : ' + e.message, 'r'); }
@@ -135,13 +178,14 @@ const Sauv = {
     try {
       const r = await fetch('https://api.dropboxapi.com/2/files/list_folder', { method: 'POST', headers: { Authorization: 'Bearer ' + await Sauv.jeton(), 'Content-Type': 'application/json' }, body: JSON.stringify({ path: '' }) });
       const j = await r.json(); const l = (j.entries || []).filter(e => e['.tag'] === 'file' && /\.snetaa$/.test(e.name)).sort((a, b) => a.server_modified < b.server_modified ? 1 : -1);
-      UI.modal('Restaurer depuis Dropbox', l.length ? `<div class="tablewrap" style="max-height:50vh"><table><tbody>${l.slice(0, 40).map(e => `<tr><td>${esc(e.name)}</td><td class="small">${fmtDT(e.server_modified)}</td><td><button class="btn sm red" onclick="UI.close();Sauv._restaurerDbx(${JSON.stringify(e.path_lower).replace(/"/g, '&quot;')})">Restaurer</button></td></tr>`).join('')}</tbody></table></div>` : '<p class="mut">Aucune sauvegarde sur Dropbox.</p>', [{ label: 'Fermer' }], { wide: true });
+      UI.modal('Restaurer depuis Dropbox', l.length ? `<div class="tablewrap" style="max-height:50vh"><table><tbody>${l.slice(0, 40).map(e => `<tr><td>${esc(e.name)}</td><td class="small">${fmtDT(e.server_modified)}</td><td><button class="btn sm red" onclick="UI.close();Sauv._restaurerDbx(${JSON.stringify(e.path_lower).replace(/"/g, '&quot;')},${JSON.stringify({ name: e.name, server_modified: e.server_modified }).replace(/"/g, '&quot;')})">Restaurer</button></td></tr>`).join('')}</tbody></table></div>` : '<p class="mut">Aucune sauvegarde sur Dropbox.</p>', [{ label: 'Fermer' }], { wide: true });
     } catch (e) { UI.toast('Dropbox : ' + e.message, 'r'); }
   },
-  async _restaurerDbx(path) {
+  async _restaurerDbx(path, meta) {
     try {
       const r = await fetch('https://content.dropboxapi.com/2/files/download', { method: 'POST', headers: { Authorization: 'Bearer ' + await Sauv.jeton(), 'Dropbox-API-Arg': JSON.stringify({ path }) } });
-      const txt = await r.text(); await Params.restaurerTexte(txt);
+      let m = meta; try { m = m || JSON.parse(r.headers.get('Dropbox-API-Result') || 'null'); } catch (e) { }
+      const txt = await r.text(); if (await Params.restaurerTexte(txt) && m) await Sauv.marquerSync(m.name, m.server_modified);
     } catch (e) { UI.toast('Restauration impossible : ' + e.message, 'r'); }
   }
 };
