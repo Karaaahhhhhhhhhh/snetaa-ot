@@ -74,14 +74,15 @@ const Adh = {
     return out;
   },
   aSignaler(p) {
-    if (p.archive && !(p.changementAcademie && !p.changementAcademie.notifie)) return null;
-    const r = { p, diffs: Adh.diffs(p), nouveau: false, academie: null, email: false, autreAcad: null };
+    if (p.archive && !(p.changementAcademie && !p.changementAcademie.notifie) && !(p.changementCorps && !p.changementCorps.notifie)) return null;
+    const r = { p, diffs: Adh.diffs(p), nouveau: false, academie: null, email: false, autreAcad: null, corps: null };
+    if (p.changementCorps && !p.changementCorps.notifie) r.corps = p.changementCorps;
     if (p.categorie === 'adherent' && p.ajoutManuel && !(D.lastSnapshot && D.lastSnapshot.records[p.id]) && !p.signale.__nouveau) r.nouveau = true;
     if (p.changementAcademie && !p.changementAcademie.notifie) r.academie = p.changementAcademie;
     if (p.autreAcademie && !p.autreAcademie.notifie) r.autreAcad = p.autreAcademie;
     if (p.emailInvalide && !p.emailInvalide.signale) r.email = true;
     r.fusions = (p.fusions || []).filter(f => !f.signale);
-    return (r.diffs.length || r.fusions.length || r.nouveau || r.academie || r.email || r.autreAcad) ? r : null;
+    return (r.diffs.length || r.fusions.length || r.nouveau || r.academie || r.email || r.autreAcad || r.corps) ? r : null;
   },
   countDiffs() { return D.personnes.filter(p => Adh.aSignaler(p)).length; },
   filtreRapide(flag) { Adh.f = Object.assign({}, Adh.f, { flag, q: '', cat: '', cotis: '' }); App.go('adherents'); setTimeout(App.route, 0); },
@@ -100,6 +101,7 @@ const Adh = {
       if (f.flag === 'sansEmail' && p.email) return false;
       if (f.flag === 'sansTel' && (p.telPortable || p.telFixe)) return false;
       if (f.flag === 'acad' && !p.changementAcademie && !p.autreAcademie) return false;
+      if (f.flag === 'corps' && !p.changementCorps) return false;
       if (f.flag === 'civil' && p.calendrier !== 'civil') return false;
       if (f.flag === 'diff' && !Adh.aSignaler(p)) return false;
       if (q && !norm([p.nom, p.prenom, p.nomNaissance, p.email, p.telPortable, p.ville, P.etabs(p), p.discipline, discLabel(p.discipline), p.numAdherent].join(' ')).includes(q)) return false;
@@ -126,7 +128,7 @@ const Adh = {
         <select onchange="Adh.setF('dep',this.value)">${UI.opts(Object.entries(REF.departements).map(([k, v]) => [k, k + ' ' + v]), f.dep, 'Tous départements')}</select>
         <select onchange="Adh.setF('etab',this.value)" style="max-width:220px">${UI.opts(etabs, f.etab, 'Tous établissements')}</select>
         <select onchange="Adh.setF('mil',this.value)">${UI.militantsOpts(f.mil, 'Tous militants')}<option value="_none" ${f.mil === '_none' ? 'selected' : ''}>Sans militant</option></select>
-        <select onchange="Adh.setF('flag',this.value)">${UI.opts([['emailInvalide', 'Mail en erreur'], ['sansEmail', 'Sans mail'], ['sansTel', 'Sans téléphone'], ['acad', 'Changement d\'académie'], ['civil', 'Calendrier civil (ex-FO)'], ['diff', 'Modifs à signaler']], f.flag, 'Aucun signalement')}</select>
+        <select onchange="Adh.setF('flag',this.value)">${UI.opts([['emailInvalide', 'Mail en erreur'], ['sansEmail', 'Sans mail'], ['sansTel', 'Sans téléphone'], ['acad', 'Changement d\'académie'], ['corps', 'Changement de corps / syndicat'], ['civil', 'Calendrier civil (ex-FO)'], ['diff', 'Modifs à signaler']], f.flag, 'Aucun signalement')}</select>
         <select id="adhfonc" onchange="Adh.setF('fonc',this.value);Adh.renderChips()">${UI.opts(Adh.FONCS, f.fonc, 'Fonction : toutes')}</select>
         <button class="btn ghost sm" onclick="Adh.f={q:'',cat:'',cotis:'',statut:'',disc:'',dep:'',etab:'',mil:'',flag:'',fonc:'',sort:'nom',lim:300};Adh.page()">Réinitialiser</button>
       </div>
@@ -151,7 +153,7 @@ const Adh = {
     $('#adhlist').innerHTML = `<div class="tablewrap"><table><thead><tr><th><input type="checkbox" onclick="UI.selAll(${JSON.stringify(l.slice(0, lim).map(p => p.id)).replace(/"/g, '&quot;')},this.checked)"></th>${th('nom', 'Nom')}${th('fonc', 'Fonction')}${th('statut', 'Statut / discipline')}${th('etab', 'Établissement')}${th('dep', 'Dép.')}${th('cotis', 'Cotisation')}<th class="hide-m">Contact</th><th class="hide-m">Militant</th></tr></thead><tbody>
       ${l.slice(0, lim).map(p => `<tr class="click" onclick="if(event.target.type!=='checkbox')App.go('fiche/${p.id}')">
         <td><input type="checkbox" class="rowsel" ${UI.sel.has(p.id) ? 'checked' : ''} onchange="UI.selToggle('${p.id}',this.checked)"></td>
-        <td><b>${esc(P.full(p))}</b>${p.calendrier === 'civil' ? ' <span class="tag v" title="Calendrier civil (1er janvier - 31 décembre)">civil</span>' : ''}${p.changementAcademie ? ' <span class="tag w">→ ' + esc(p.changementAcademie.nouvelle) + '</span>' : ''}</td>
+        <td><b>${esc(P.full(p))}</b>${p.calendrier === 'civil' ? ' <span class="tag v" title="Calendrier civil (1er janvier - 31 décembre)">civil</span>' : ''}${p.changementAcademie ? ' <span class="tag w">→ ' + esc(p.changementAcademie.nouvelle) + '</span>' : ''}${p.changementCorps ? ' <span class="tag w" title="Changement de corps">→ ' + esc(p.changementCorps.syndicat) + '</span>' : ''}</td>
         <td>${Mandats.tags(p)} ${Adh.badgeAcces(p)}</td>
         <td>${esc(STATUT(p.statut)[1] ? STATUT(p.statut)[0] : '')}${p.discipline ? ' · <span title="' + esc(discLabel(p.discipline)) + '">' + esc(p.discipline) + '</span>' : ''}</td>
         <td>${esc(P.etab(p)) || (p.statut === 'RETR' ? '<span class="mut">retraité·e</span>' : '')}</td><td>${esc(P.dep(p))}</td><td>${P.cotisTag(p)}${p.situationNat ? ' <span class="tag ko">' + esc(p.situationNat.toLowerCase()) + '</span>' : ''}</td>
@@ -279,6 +281,7 @@ const Adh = {
       p.emailInvalide ? b('✓ L\'adresse mail fonctionne à nouveau', `Adh.emailInvalide('${id}',false)`) : b('✗ Signaler l\'adresse mail comme fausse (retour en erreur)', `Adh.emailInvalide('${id}',true)`),
       can('adh.national') ? b('⇄ Changement d\'académie (mail au national et à l\'académie)', `Adh.changementAcademie('${id}')`) : '',
       can('adh.national') ? b('⇄ Adhérent encore enregistré dans une autre académie', `Adh.autreAcademie('${id}')`) : '',
+      can('adh.national') ? b('⇢ Changement de corps (départ vers un autre syndicat FO)', `Adh.changementCorps('${id}')`) : '',
       b('✉ Demander à l\'adhérent de vérifier ses informations', `MajAdh.demande(['${id}'])`),
       b('⧉ Fusionner avec une autre fiche (doublon)', `Doublons.choisirAutre('${id}')`),
       p.categorie !== 'adherent' || ['ancien', 'retard'].includes(P.cotis(p)) ? (p.refusAdhesion ? b('🎯 Remettre dans la liste « À faire adhérer »', `Adh.refusAdhesion('${id}',false)`) : b('🚫 Ne souhaite pas adhérer (retirer de la liste « À faire adhérer »)', `Adh.refusAdhesion('${id}',true)`)) : '',
@@ -316,6 +319,46 @@ const Adh = {
           setTimeout(() => Adh.mailAcademie(id, 'change'), 50);
         }
       }]);
+  },
+  SYND_FO: [['SNFOLC', 'SNFOLC – lycées et collèges (certifiés, agrégés…)'], ['SNUDI-FO', 'SNUDI-FO – premier degré (professeurs des écoles)'], ['SPASEEN-FO', 'SPASEEN-FO – administratifs, santé, social'], ['Syndicat FO des personnels de direction', 'Personnels de direction (syndicat FO à préciser)'], ['Autre syndicat de la FNEC FP-FO', 'Autre syndicat de la FNEC FP-FO (préciser)'], ['Hors FNEC FP-FO', 'Hors FNEC FP-FO / quitte le syndicat']],
+  CORPS: ['Professeur certifié', 'Professeur agrégé', 'Professeur des écoles', 'Personnel de direction', 'Inspecteur (IEN / IA-IPR)', 'Psychologue de l\'EN', 'Personnel administratif', 'Autre'],
+  changementCorps(id) {
+    const p = P.get(id); const c = p.changementCorps || {};
+    UI.modal('Changement de corps — ' + P.full(p), `<p class="small mut">L'adhérent change de corps (concours, liste d'aptitude, détachement, intégration…) et relève désormais d'un autre syndicat. On le signale au national et au syndicat d'accueil.</p>
+      <div class="frow"><div class="f"><label>Ancien corps / statut</label><input id="cc_a" value="${esc(c.ancien || STATUT(p.statut)[1] || '')}"></div><div class="f"><label>Nouveau corps</label><select id="cc_n">${UI.opts(Adh.CORPS, c.nouveau, '—')}</select></div></div>
+      <div class="frow"><div class="f"><label>Motif</label><select id="cc_m">${UI.opts(['Concours', 'Liste d\'aptitude', 'Détachement', 'Intégration', 'Reconversion', 'Autre'], c.motif || 'Concours')}</select></div><div class="f"><label>Date d'effet</label><input type="date" id="cc_d" value="${esc(c.date || todayISO())}"></div></div>
+      <div class="frow"><div class="f"><label>Syndicat d'accueil</label><select id="cc_s">${UI.opts(Adh.SYND_FO, c.syndicat || 'SNFOLC')}</select></div><div class="f"><label>Précision (nom du syndicat, section…)</label><input id="cc_p" value="${esc(c.precision || '')}"></div></div>
+      <div class="f"><label>Courriel du syndicat d'accueil (facultatif)</label><input id="cc_mail" value="${esc(c.mailSyndicat || (D.meta.mailsSyndicatsFO || {})[c.syndicat || 'SNFOLC'] || '')}" placeholder="ex. section académique du SNFOLC"></div>
+      <div class="f"><label>Après l'envoi</label>
+        <label class="chk"><input type="radio" name="cc_apres" value="contact" ${c.apres !== 'archive' ? 'checked' : ''}> Garder la fiche comme <b>contact</b> (il reste électeur FO : cahier de votants, relais…)</label>
+        <label class="chk"><input type="radio" name="cc_apres" value="archive" ${c.apres === 'archive' ? 'checked' : ''}> Archiver la fiche (ne fait plus partie du fichier)</label></div>`,
+      [{ label: 'Annuler' }, { label: 'Préparer le mail', onClick: m => {
+        const g = q => m.querySelector(q).value.trim(); if (!g('#cc_n')) { UI.toast('Choisis le nouveau corps', 'r'); return false; }
+        p.changementCorps = { ancien: g('#cc_a'), nouveau: g('#cc_n'), motif: g('#cc_m'), date: g('#cc_d'), syndicat: g('#cc_s'), precision: g('#cc_p'), mailSyndicat: g('#cc_mail'), apres: m.querySelector('input[name=cc_apres]:checked').value, notifie: null };
+        if (g('#cc_mail')) { D.meta.mailsSyndicatsFO = D.meta.mailsSyndicatsFO || {}; D.meta.mailsSyndicatsFO[g('#cc_s')] = g('#cc_mail'); }
+        P.touch(p); log('Changement de corps', P.full(p) + ' → ' + g('#cc_n') + ' (' + g('#cc_s') + ')');
+        setTimeout(() => Adh.mailCorps(id), 50);
+      } }], { wide: true });
+  },
+  mailCorps(id) {
+    const p = P.get(id), c = p.changementCorps, M = D.meta;
+    const synd = c.syndicat + (c.precision ? ' (' + c.precision + ')' : '');
+    const subj = `[SNETAA-FO] Changement de corps — ${P.full(p)} (${c.ancien} → ${c.nouveau})`;
+    const txt = `Nous vous informons que notre adhérent(e) ci-dessous change de corps${c.date ? ' à compter du ' + fmtDate(c.date) : ''} : ${c.ancien} → ${c.nouveau} (${c.motif.toLowerCase()}).\nIl/elle relève désormais de : ${synd}.\nMerci de mettre à jour le fichier national${c.syndicat !== 'Hors FNEC FP-FO' ? ' et d\'assurer le relais avec ce syndicat de la FNEC FP-FO afin que la continuité de son adhésion à Force Ouvrière soit garantie' : ''}.`;
+    const to = [M.mailNational, c.mailSyndicat].filter(Boolean).join(',');
+    UI.modal('Mail au national' + (c.mailSyndicat ? ' et au syndicat d\'accueil' : ''), `${!M.mailNational ? '<div class="alert w">Adresse du national non renseignée : <a href="#/params" onclick="UI.close()">Paramètres</a>.</div>' : ''}
+      <div class="f"><label>Destinataires</label><input id="mc_to" value="${esc(to)}"></div><div class="f"><label>Copie</label><input id="mc_cc" value="${esc(M.ccNational || '')}"></div><div class="f"><label>Objet</label><input id="mc_s" value="${esc(subj)}"></div><div class="f"><label>Message</label><textarea id="mc_b" style="min-height:260px">${esc(Adh.natMailBody(p, txt))}</textarea></div>`,
+      [{ label: 'Fermer' }, { label: 'Copier le texte', onClick: m => { copyText(m.querySelector('#mc_b').value); return false; } },
+      { label: 'Ouvrir dans ma messagerie et marquer comme envoyé', onClick: m => {
+        openLink(mailto(m.querySelector('#mc_to').value, m.querySelector('#mc_s').value, m.querySelector('#mc_b').value, m.querySelector('#mc_cc').value));
+        Adh.appliquerCorps(p);
+        p.interventions.push({ id: uid(), date: todayISO(), type: 'Adhésion / cotisation', canal: 'mail', objet: m.querySelector('#mc_s').value, detail: 'Changement de corps signalé au national' + (c.mailSyndicat ? ' et à ' + synd : ''), auteur: ME.id });
+        P.touch(p); save(); log('Changement de corps signalé', P.full(p)); App.route();
+      } }], { wide: true });
+  },
+  appliquerCorps(p) {
+    const c = p.changementCorps; c.notifie = todayISO();
+    if (c.apres === 'archive') p.archive = todayISO(); else { p.categorie = 'contact'; p.notes = ((p.notes || '') + `\nAncien adhérent SNETAA-FO, passé ${c.nouveau.toLowerCase()} le ${fmtDate(c.date)} → ${c.syndicat}.`).trim(); }
   },
   autreAcademie(id) {
     const p = P.get(id); const c = p.autreAcademie || {};
@@ -546,6 +589,7 @@ const National = {
       if (r.nouveau) rows.push(['Adhérent absent du fichier national', '', 'à créer']);
       if (r.autreAcad) rows.push(['Encore enregistré à ' + r.autreAcad.academie, r.autreAcad.academie, D.meta.syndicat.academie]);
       if (r.academie) rows.push(['Changement d\'académie', r.academie.ancienne, r.academie.nouvelle]);
+      if (r.corps) rows.push(['Changement de corps → ' + r.corps.syndicat, r.corps.ancien, r.corps.nouveau + (r.corps.date ? ' au ' + fmtDate(r.corps.date) : '')]);
       r.fusions.forEach(f => rows.push(['Doublon dans le fichier national (fiche fusionnée)', 'n° ' + f.num, 'garder le n° ' + (r.p.numAdherent || '?')]));
       if (r.email) rows.push(['Adresse mail en erreur', r.p.emailInvalide.email || r.p.email, 'adresse à vérifier']);
       r.diffs.forEach(d => rows.push([d.l, d.avant, d.apres]));
@@ -559,6 +603,7 @@ const National = {
     D.personnes.map(Adh.aSignaler).filter(Boolean).forEach(r => {
       const base = { 'N° adhérent': r.p.numAdherent || '', Nom: r.p.nom, Prénom: r.p.prenom, 'Date de naissance': fmtDate(r.p.dateNaissance) };
       if (r.nouveau) out.push(Object.assign({}, base, { Nature: 'Nouvel adhérent à créer', 'Valeur actuelle (fichier national)': '', 'Valeur corrigée': [STATUT(r.p.statut)[1], r.p.discipline, P.etabs(r.p), r.p.email, r.p.telPortable].filter(Boolean).join(' / ') }));
+      if (r.corps) out.push(Object.assign({}, base, { Nature: 'Changement de corps (départ vers ' + r.corps.syndicat + ')', 'Valeur actuelle (fichier national)': r.corps.ancien, 'Valeur corrigée': r.corps.nouveau + (r.corps.date ? ' au ' + fmtDate(r.corps.date) : '') }));
       if (r.autreAcad) out.push(Object.assign({}, base, { Nature: 'Rattachement académique', 'Valeur actuelle (fichier national)': r.autreAcad.academie, 'Valeur corrigée': D.meta.syndicat.academie }));
       if (r.academie) out.push(Object.assign({}, base, { Nature: 'Changement d\'académie', 'Valeur actuelle (fichier national)': r.academie.ancienne, 'Valeur corrigée': r.academie.nouvelle + (r.academie.date ? ' au ' + fmtDate(r.academie.date) : '') }));
       r.fusions.forEach(f => out.push(Object.assign({}, base, { Nature: 'Doublon : fiche n° ' + f.num + ' à supprimer (même personne)', 'Valeur actuelle (fichier national)': 'n° ' + f.num, 'Valeur corrigée': 'n° ' + (r.p.numAdherent || '') })));
@@ -586,6 +631,7 @@ const National = {
       (p.fusions || []).forEach(f => { if (!f.signale) f.signale = todayISO(); });
       if (r.academie) { p.changementAcademie.notifie = todayISO(); if (p.changementAcademie.archiver) p.archive = todayISO(); }
       if (r.autreAcad) p.autreAcademie.notifie = todayISO();
+      if (r.corps) Adh.appliquerCorps(p);
     });
     log('Récapitulatif transmis au national'); save(); App.refresh();
   }
