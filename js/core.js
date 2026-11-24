@@ -3,7 +3,7 @@
    Noyau : données, référentiels, comptes, droits, navigation
    ========================================================= */
 'use strict';
-const APP_VERSION = '2026-11-24 n°10';
+const APP_VERSION = '2026-11-24 n°11';
 
 /* ---------- Utilitaires ---------- */
 const $ = (s, r = document) => r.querySelector(s);

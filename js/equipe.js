@@ -58,7 +58,7 @@ const Equipe = {
     async creerDepot() { return (await Equipe.canal.appel('file_requests/create', { title: 'Retours SNETAA-FO Orléans-Tours', destination: Equipe.DOSSIER_RETOURS, open: true })).url; }
   },
   erreurDroits(e) {
-    if (/missing_scope|scope/.test(e.message)) return 'Dropbox refuse : il manque une autorisation. Dans dropbox.com/developers/apps → ton application → onglet Autorisations, coche aussi sharing.write, sharing.read, file_requests.write et file_requests.read, clique sur Envoyer, puis ici « Déconnecter » et « Connecter mon Dropbox » à nouveau.';
+    if (/missing_scope|scope/.test(e.message)) return 'Dropbox refuse : il manque une autorisation. Dans dropbox.com/developers/apps → ton application → onglet Autorisations, coche aussi sharing.write, sharing.read, file_requests.write et file_requests.read, clique en bas sur « Enregistrer les modifications », puis dans l\'application : Sauvegarde → « Déconnecter » puis « Connecter mon Dropbox » (Dropbox redemande ton accord pour les nouvelles autorisations).';
     return e.message;
   },
 
