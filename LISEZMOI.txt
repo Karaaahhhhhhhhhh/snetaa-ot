@@ -34,3 +34,10 @@ CONTENU
 index.html, style.css, js/ (programme), lib/ (Excel, cartographie), img/ (logos, icônes)
 Données publiques incluses : lycées de l'académie (ONISEP), formations post-bac
 (Parcoursup 2026), collèges, SEGPA et EREA (ONISEP), rectorat (sites Saint-Étienne et Coligny) et DSDEN.
+
+SÉCURITÉ DES ACCÈS (invitations)
+- Pour donner un accès : fiche de la personne > onglet « Accès & droits » > « Ouvrir un accès (invitation sécurisée) ».
+- Le fichier d'invitation (chiffré) part par mail ; le code d'accès (10 caractères) part par SMS. Valable 7 jours.
+- À la première connexion, la personne saisit le code, confirme sa date de naissance, choisit un code personnel (6 à 10 chiffres),
+  puis te communique un code de confirmation à 6 caractères que tu saisis dans sa fiche : « identité vérifiée ».
+- 5 codes faux : accès suspendu (1 min, puis 2, 4… jusqu'à 60). 10 codes faux sur l'appareil d'un invité : nouvelle invitation nécessaire.

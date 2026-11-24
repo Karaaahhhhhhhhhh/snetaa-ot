@@ -44,7 +44,7 @@ const Droits = {
       <div class="kv"><div>Fonctions donnant des droits</div><div>${fonctions.map(m => `<span class="tag v">${esc(Mandats.libelle(m))}</span>`).join(' ') || '<span class="mut">aucune (désigne la personne dans l\'onglet Mandats)</span>'}</div></div>`;
     if (!u) {
       const libres = D.users.filter(x => !x.pid);
-      h += `<p style="margin-top:1rem"><button class="btn" onclick="Droits.creer('${p.id}')">+ Ouvrir un accès à l'application</button>
+      h += `<p style="margin-top:1rem"><button class="btn" onclick="Droits.creer('${p.id}')">✉ Ouvrir un accès (invitation sécurisée)</button>
         ${libres.length ? ` ou relier un compte existant : <select id="dr_lien" style="width:auto">${UI.opts(libres.map(x => [x.id, x.prenom + ' ' + x.nom]), '', '—')}</select> <button class="btn sm sec" onclick="Droits.relier('${p.id}')">Relier</button>` : ''}</p></div>`;
       return h;
     }
@@ -56,16 +56,17 @@ const Droits = {
       <div>Rôle complémentaire</div><div><select style="width:auto" onchange="Droits.setRole('${u.id}',this.value)" ${admin && u.id === ME.id ? 'disabled' : ''}>${UI.opts([['aucun', 'Aucun (droits issus des mandats)'], ...Object.entries(D.roles).filter(([k]) => !['s3', 's2', 's1', 'tresorier'].includes(k)).map(([k, r]) => [k, r.label])], u.role || 'aucun')}</select></div></div>
       <h3>Droits détaillés</h3>${admin ? '<p class="small mut">Administrateur principal : tous les droits.</p>' : ''}
       <div class="tablewrap" style="max-height:380px"><table><tbody>${PERMS.map(([k, l, g], i) => `${i === 0 || PERMS[i - 1][2] !== g ? `<tr><th colspan="2">${esc(g)}</th></tr>` : ''}<tr><td style="width:2rem"><input type="checkbox" ${eff.has(k) ? 'checked' : ''} ${admin ? 'disabled' : ''} onchange="Droits.basculer('${u.id}','${k}',this.checked,'${p.id}')"></td><td class="small">${esc(l)} ${base.has(k) ? '<span class="mut">(fonction)</span>' : (u.permsPlus || []).includes(k) ? '<span class="tag ok">ajouté</span>' : ''}${base.has(k) && (u.permsMoins || []).includes(k) ? ' <span class="tag ko">retiré</span>' : ''}</td></tr>`).join('')}</tbody></table></div>
-      <p style="margin-top:.8rem"><button class="btn sec sm" onclick="Droits.pin('${u.id}')">Nouveau code PIN</button> ${u.id !== ME.id ? `<button class="btn sec sm" onclick="Droits.actif('${u.id}',${u.actif === false})">${u.actif === false ? 'Réactiver le compte' : 'Désactiver le compte'}</button> <button class="btn sec sm" onclick="Droits.delier('${u.id}')">Délier de la fiche</button>` : ''}</p></div>`;
+      ${!admin || u.id !== ME.id ? Secu.blocFiche(u) : ''}
+      <p style="margin-top:.8rem"><button class="btn sec sm" onclick="Droits.pin('${u.id}')">${u.id === ME.id ? 'Changer mon code personnel' : 'Code provisoire (sur cet appareil)'}</button> ${u.id !== ME.id ? `<button class="btn sec sm" onclick="Droits.actif('${u.id}',${u.actif === false})">${u.actif === false ? 'Réactiver le compte' : 'Désactiver le compte'}</button> <button class="btn sec sm" onclick="Droits.delier('${u.id}')">Délier de la fiche</button>` : ''}</p></div>`;
     return h;
   },
   async creer(pid) {
     const p = P.get(pid);
-    const pin = await UI.prompt('Accès pour ' + P.full(p), 'Code PIN provisoire (4 à 8 chiffres), à transmettre à la personne :', String(Math.floor(1000 + Math.random() * 9000)), 'text');
-    if (pin == null) return; if (!/^\d{4,8}$/.test(pin)) return UI.toast('PIN : 4 à 8 chiffres', 'r');
-    const salt = uid();
-    D.users.push({ id: uid(), pid, prenom: p.prenom, nom: p.nom, email: p.email, tel: p.telPortable, role: 'aucun', salt, pin: await Auth.hashPin(pin, salt), actif: true, perimetre: { etabs: [], deps: [] }, permsPlus: [], permsMoins: [], created: nowISO() });
-    save(); log('Accès créé', P.full(p) + ' (' + Droits.libelle(D.users[D.users.length - 1]) + ')'); UI.renderNav(); App.route();
+    if (!p.email && !p.telPortable) return UI.toast('Renseigne d\'abord le courriel et le portable de la fiche (les deux canaux de l\'invitation)', 'r');
+    if (!p.dateNaissance && !await UI.confirm('La date de naissance n\'est pas renseignée sur la fiche : elle sert de question de vérification à la première connexion. Continuer sans ?', 'Continuer')) return;
+    const u = { id: uid(), pid, prenom: p.prenom, nom: p.nom, email: p.email, tel: p.telPortable, role: 'aucun', salt: '', pin: '', actif: true, perimetre: { etabs: [], deps: [] }, permsPlus: [], permsMoins: [], created: nowISO() };
+    D.users.push(u); save(); log('Accès créé', P.full(p) + ' (' + Droits.libelle(u) + ')'); UI.renderNav();
+    App.route(); Secu.inviter(u.id);
   },
   relier(pid) { const id = $('#dr_lien').value; const u = D.users.find(x => x.id === id); if (!u) return; u.pid = pid; save(); log('Compte relié à une fiche', u.prenom + ' ' + u.nom); Droits.rafraichir(); UI.renderNav(); App.route(); },
   async delier(id) { const u = D.users.find(x => x.id === id); if (!await UI.confirm('Délier le compte de cette fiche ? Il perd les droits liés aux mandats.', 'Délier')) return; u.pid = null; save(); App.route(); },
@@ -80,9 +81,11 @@ const Droits = {
   },
   async pin(id) {
     const u = D.users.find(x => x.id === id);
-    const pin = await UI.prompt('Nouveau code PIN', 'Code PIN (4 à 8 chiffres) :', '', 'text'); if (pin == null) return;
-    if (!/^\d{4,8}$/.test(pin)) return UI.toast('PIN : 4 à 8 chiffres', 'r');
-    u.salt = uid(); u.pin = await Auth.hashPin(pin, u.salt); save(); log('PIN modifié', u.prenom + ' ' + u.nom); UI.toast('PIN modifié', 'g');
+    const moi = u.id === ME.id;
+    const pin = await UI.prompt(moi ? 'Changer mon code personnel' : 'Code provisoire', moi ? 'Nouveau code (6 à 10 chiffres) :' : 'Code provisoire (6 à 10 chiffres). La personne devra le changer à sa première connexion sur cet appareil :', '', moi ? 'password' : 'text'); if (pin == null) return;
+    const err = Secu.pinValide(pin, Droits.personne(u)); if (err) return UI.toast(err, 'r');
+    await Secu.definirPin(u, pin); u.pinProvisoire = !moi; delete (D.meta.echecs || {})[u.id]; u.bloque = null;
+    save(); log(moi ? 'Code personnel modifié' : 'Code provisoire attribué', u.prenom + ' ' + u.nom); UI.toast('Code enregistré', 'g'); App.route();
   },
   actif(id, on) { const u = D.users.find(x => x.id === id); u.actif = on; save(); log(on ? 'Compte réactivé' : 'Compte désactivé', u.prenom + ' ' + u.nom); App.route(); }
 };
