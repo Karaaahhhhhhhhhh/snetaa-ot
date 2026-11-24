@@ -283,6 +283,7 @@ const Adh = {
       can('adh.national') ? b('⇄ Adhérent encore enregistré dans une autre académie', `Adh.autreAcademie('${id}')`) : '',
       can('adh.national') ? b('⇢ Changement de corps (départ vers un autre syndicat FO)', `Adh.changementCorps('${id}')`) : '',
       b('✉ Demander à l\'adhérent de vérifier ses informations', `MajAdh.demande(['${id}'])`),
+      b('🔎 Chercher dans l\'annuaire du rectorat (nom copié)', `Liens.annuaire('${id}')`),
       b('⧉ Fusionner avec une autre fiche (doublon)', `Doublons.choisirAutre('${id}')`),
       p.categorie !== 'adherent' || ['ancien', 'retard'].includes(P.cotis(p)) ? (p.refusAdhesion ? b('🎯 Remettre dans la liste « À faire adhérer »', `Adh.refusAdhesion('${id}',false)`) : b('🚫 Ne souhaite pas adhérer (retirer de la liste « À faire adhérer »)', `Adh.refusAdhesion('${id}',true)`)) : '',
       p.archive ? b('Désarchiver la fiche', `Adh.archiver('${id}',false)`) : b('Archiver la fiche (ne fait plus partie du fichier)', `Adh.archiver('${id}',true)`),

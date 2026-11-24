@@ -3,7 +3,7 @@
    Noyau : données, référentiels, comptes, droits, navigation
    ========================================================= */
 'use strict';
-const APP_VERSION = '2026-11-24 n°17';
+const APP_VERSION = '2026-11-24 n°18';
 
 /* ---------- Utilitaires ---------- */
 const $ = (s, r = document) => r.querySelector(s);
@@ -586,5 +586,32 @@ App.routes[''] = function () {
     h += `<div class="card"><h2 style="margin-top:0">Démarrage rapide — cahier de votants</h2>${steps.map((s, i) => `<div class="chk" style="margin:.4rem 0">${s[2] ? '✅' : '⬜'} <a href="#/${s[1]}">${i + 1}. ${esc(s[0])}</a></div>`).join('')}</div>`;
   }
   if (can('adm.journal')) h += `<div class="card"><h3 style="margin-top:0">Dernières actions</h3>${D.journal.slice(0, 8).map(j => `<div class="small"><span class="mut">${fmtDT(j.d)}</span> — ${esc(userName(j.u))} : ${esc(j.a)} ${esc(j.x)}</div>`).join('') || '<span class="mut">—</span>'}</div>`;
+  h += Liens.carte();
   $('#main').innerHTML = h;
+};
+
+/* ---------- Liens utiles (accueil, fiche, paramètres) ---------- */
+const Liens = {
+  DEFAUT: [
+    { id: 'annuaire-rectorat', nom: 'Annuaire des personnels du rectorat (Orléans-Tours)', url: 'https://bv.ac-orleans-tours.fr/annuaire/Login.jsp', note: 'Accès avec l\'identifiant académique' },
+    { id: 'snetaa', nom: 'Site du SNETAA-FO national', url: 'https://www.snetaa.org/', note: '' },
+    { id: 'elections', nom: 'Portail des élections professionnelles 2026', url: 'https://www.education-superieur-recherche-jeunesse-sports.gouv.fr/electionspro2026', note: 'Espace électeur et vote' },
+    { id: 'ensap', nom: 'ENSAP (bulletins de paie, code de vote)', url: 'https://ensap.gouv.fr/', note: '' }
+  ],
+  liste() { if (!D.meta.liens) D.meta.liens = JSON.parse(JSON.stringify(Liens.DEFAUT)); return D.meta.liens; },
+  get(id) { return Liens.liste().find(l => l.id === id); },
+  carte() {
+    const l = Liens.liste(); if (!l.length) return '';
+    return `<div class="card" style="margin-top:1rem"><h3 style="margin-top:0">🔗 Liens utiles</h3><div style="display:flex;flex-wrap:wrap;gap:.5rem">${l.map(x => `<a class="btn sec sm" href="${esc(x.url)}" target="_blank" rel="noopener" title="${esc(x.note || x.url)}">${esc(x.nom)}</a>`).join('')}</div>${can('adm.params') ? '<p class="small mut" style="margin-bottom:0"><a href="#/params">Modifier les liens</a> (Paramètres)</p>' : ''}</div>`;
+  },
+  annuaire(id) {
+    const p = id && P.get(id), a = Liens.get('annuaire-rectorat'); if (!a) return UI.toast('Lien de l\'annuaire absent (Paramètres → Liens utiles)', 'r');
+    if (p) copyText((p.nom || '').toUpperCase() + ' ' + (p.prenom || ''));
+    openLink(a.url); if (p) UI.toast('Nom copié : colle-le dans la recherche de l\'annuaire', 'g');
+  },
+  paramCarte() {
+    return `<div class="card"><h3 style="margin-top:0">Liens utiles</h3><p class="small mut">Affichés sur l'accueil. Le lien « annuaire » sert aussi au bouton « Chercher dans l'annuaire du rectorat » des fiches.</p>
+      <div class="tablewrap"><table><thead><tr><th>Nom</th><th>Adresse</th><th></th></tr></thead><tbody>${Liens.liste().map((x, i) => `<tr><td><input value="${esc(x.nom)}" onchange="Liens.liste()[${i}].nom=this.value;save()"></td><td><input value="${esc(x.url)}" onchange="Liens.liste()[${i}].url=this.value.trim();save()"></td><td><button class="btn sm ghost" onclick="Liens.liste().splice(${i},1);save();App.route()">✕</button></td></tr>`).join('')}</tbody></table></div>
+      <p><button class="btn sm sec" onclick="Liens.liste().push({id:uid(),nom:'Nouveau lien',url:'https://'});save();App.route()">+ Ajouter un lien</button></p></div>`;
+  }
 };

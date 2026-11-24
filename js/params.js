@@ -250,6 +250,7 @@ const Params = {
         <details><summary>Courriels des sections académiques SNETAA-FO (changements d'académie)</summary><div class="frow" style="margin-top:.6rem">${REF.academies.filter(a => a !== s.academie).map(a => `<div class="f"><label>${esc(a)}</label><input value="${esc(M.mailsAcademies[a] || '')}" onchange="D.meta.mailsAcademies['${esc(a).replace(/'/g, "\\'")}']=this.value.trim();save()"></div>`).join('')}</div></details></div>
       ${Carriere.carte()}
       ${Scrutins.carte()}
+      ${Liens.paramCarte()}
       <div class="card"><h3 style="margin-top:0">Disciplines (${D.disciplines.length})</h3><p class="small mut">Codes de la nomenclature de l'Éducation nationale (P = PLP, L = certifiés et agrégés). Ajoute ceux qui manquent.</p>
         <div class="toolbar"><input id="dc_c" placeholder="Code (ex. P4100)" style="width:130px"><input id="dc_l" placeholder="Libellé" style="flex:1"><button class="btn sm" onclick="Params.addDisc()">Ajouter</button></div>
         <div style="max-height:260px;overflow:auto;columns:2;font-size:.85rem">${D.disciplines.map((d, i) => `<div><b>${esc(d[0])}</b> ${esc(d[1])} <a href="#" onclick="D.disciplines.splice(${i},1);save();Params.page();return false" title="Retirer">✕</a></div>`).join('')}</div></div>
