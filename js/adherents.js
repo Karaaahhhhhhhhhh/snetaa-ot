@@ -210,7 +210,7 @@ const Adh = {
         ${can('com.envoyer') && p.statut !== 'RETR' && (p.categorie !== 'adherent' || ['ancien', 'retard'].includes(P.cotis(p))) ? `<button class="btn ok" onclick="Comm.envoyerSelection(['${p.id}'],null,'adhesion')">Proposer l'adhésion</button>` : ''}
         ${can('adh.modifier') ? `<button class="btn sec" onclick="Adh.intervention('${p.id}')">+ Intervention</button><button class="btn sec" onclick="Adh.importMessage('${p.id}')">⇩ Archiver un message</button><button class="btn sec" onclick="Adh.menu('${p.id}')">Autres actions ▾</button>` : ''}
       </div></div></div>`;
-    const tabs = [['id', 'Identité & affectation'], ['cotis', 'Adhésion & cotisations'], ['mand', `Mandats (${Mandats.de(p).length})`], ['hist', `Historique (${p.interventions.length + p.messages.length})`], ['vote', 'Élections'], ['reu', 'Réunions'], ['nat', 'Fichier national']];
+    const tabs = [['id', 'Identité & affectation'], ['cotis', 'Adhésion & cotisations'], ['mand', `Mandats (${Mandats.de(p).length})`], ['hist', `Historique (${p.interventions.length + p.messages.length})`], ['mut', `Mutations (${(p.mutations || []).length})`], ['vote', 'Élections'], ['reu', 'Réunions'], ['nat', 'Fichier national']];
     if (!can('adh.historique')) tabs.splice(tabs.findIndex(t => t[0] === 'hist'), 1);
     if (can('adm.users')) tabs.push(['acces', 'Accès & droits']);
     h += UI.tabs('ftabs', tabs, Adh.tab, `(k=>{Adh.tab=k;Adh.fiche('${p.id}')})`) + `<div id="ftab"></div>`;
@@ -259,6 +259,7 @@ const Adh = {
     }).join('') || '<p class="mut">Aucun échange enregistré.</p>'}</div></div>`;
   },
   tab_mand(p) { return Mandats.tabFiche(p); },
+  tab_mut(p) { return Mutations.tabFiche(p); },
   tab_acces(p) { return Droits.tabFiche(p); },
   tab_vote(p) { return (typeof Votants !== "undefined" && Votants) ? Votants.ficheVote(p) : ''; },
   tab_reu(p) {

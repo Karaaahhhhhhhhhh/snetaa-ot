@@ -81,7 +81,7 @@ const Doublons = {
     // regroupements
     b.affectations.forEach(x => { if (!a.affectations.some(y => (y.uai && y.uai === x.uai) || (!y.uai && y.nom === x.nom))) a.affectations.push(Object.assign({}, x, { principal: a.affectations.length ? false : x.principal })); });
     b.cotisations.forEach(c => { if (!a.cotisations.some(x => x.periode === c.periode)) a.cotisations.push(c); }); P.syncCal(a);
-    ['interventions', 'messages'].forEach(k => { const ids = new Set(a[k].map(x => x.id)); b[k].forEach(x => { if (!ids.has(x.id)) a[k].push(x); }); });
+    ['interventions', 'messages', 'mutations'].forEach(k => { const ids = new Set(a[k].map(x => x.id)); b[k].forEach(x => { if (!ids.has(x.id)) a[k].push(x); }); });
     const cids = new Set(a.vote.contacts.map(x => x.id)); b.vote.contacts.forEach(x => { if (!cids.has(x.id)) a.vote.contacts.push(x); });
     if (!a.vote.intention || (b.vote.intMaj || '') > (a.vote.intMaj || '')) { if (b.vote.intention) { a.vote.intention = b.vote.intention; a.vote.intMaj = b.vote.intMaj; } }
     if (b.vote.aVote && !a.vote.aVote) { a.vote.aVote = true; a.vote.dateVote = b.vote.dateVote; a.vote.sourceVote = b.vote.sourceVote; }

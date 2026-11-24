@@ -3,7 +3,7 @@
    Noyau : données, référentiels, comptes, droits, navigation
    ========================================================= */
 'use strict';
-const APP_VERSION = '2026-11-24 n°15';
+const APP_VERSION = '2026-11-24 n°16';
 
 /* ---------- Utilitaires ---------- */
 const $ = (s, r = document) => r.querySelector(s);
@@ -288,7 +288,7 @@ function migrate() {
 const P = {
   fix(p) {
     p.affectations = p.affectations || []; p.cotisations = p.cotisations || []; p.interventions = p.interventions || []; p.messages = p.messages || [];
-    p.vote = p.vote || { intention: '', contacts: [] }; p.vote.contacts = p.vote.contacts || [];
+    p.vote = p.vote || { intention: '', contacts: [] }; p.vote.contacts = p.vote.contacts || []; p.vote.scrutins = p.vote.scrutins || {}; p.mutations = p.mutations || [];
     p.localEdits = p.localEdits || {}; p.mandats = p.mandats || []; p.extra = p.extra || {}; p.signale = p.signale || {};
     p.calendrier = p.calendrier || 'scolaire'; p.categorie = p.categorie || 'adherent';
     return p;
@@ -441,7 +441,7 @@ const UI = {
   close(v) { if (UI._close) UI._close(v); },
   confirm(msg, ok) { return UI.modal('Confirmation', `<p>${msg}</p>`, [{ label: 'Annuler', value: false }, { label: ok || 'Confirmer', value: true, cls: 'red' }]); },
   prompt(title, label, val, type) {
-    return UI.modal(title, `<div class="f"><label>${esc(label)}</label><input id="_prompt" type="${type || 'text'}" value="${esc(val || '')}" onkeydown="if(event.key==='Enter'){UI.close(this.value)}"></div>`,
+    return UI.modal(title, `<div class="f"><label>${esc(label)}</label>${type === 'textarea' ? `<textarea id="_prompt" style="min-height:200px">${esc(val || '')}</textarea>` : `<input id="_prompt" type="${type || 'text'}" value="${esc(val || '')}" onkeydown="if(event.key==='Enter'){UI.close(this.value)}">`}</div>`,
       [{ label: 'Annuler', value: null }, { label: 'Valider', onClick: m => m.querySelector('#_prompt').value }]);
   },
   toggleNav() { $('#nav').classList.toggle('open'); },
@@ -457,8 +457,10 @@ const UI = {
     n.push(['majadh', 'Mises à jour par l\'adhérent', '✉', 'adh.modifier', 'Adhérents']);
     n.push(['doublons', 'Doublons', '⧉', 'adh.modifier', 'Adhérents', () => Doublons.detecter().length]);
     n.push(['cotisations', 'Cotisations & relances', '€', 'adh.cotis', 'Adhérents']);
+    n.push(['mutations', 'Suivi des mutations', '⇆', 'adh.voir', 'Adhérents']);
     n.push(['votants', 'Cahier de votants', '☑', 'vot.voir', 'Élections 2026']);
     n.push(['repartition', 'Répartition militants', '⚑', 'vot.repartir', 'Élections 2026']);
+    n.push(['relais', 'Relais de vote', '🤝', 'vot.voir', 'Élections 2026']);
     n.push(['emargement', 'Qui a voté ? (3-10 déc.)', '✔', 'vot.emarg', 'Élections 2026']);
     n.push(['bilan', 'Tableau de bord élections', '▦', 'vot.voir', 'Élections 2026']);
     n.push(['modeles', 'Mails & SMS types', '✎', 'com.envoyer', 'Communication']);

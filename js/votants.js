@@ -74,7 +74,7 @@ const Votants = {
         <td>${ed ? `<select style="border-left:6px solid ${it[2]};min-width:150px" onchange="Votants.setInt('${p.id}',this.value);this.style.borderLeftColor=intention(this.value)[2]">${UI.opts(REF.intentions.map(i => [i[0], i[1]]), p.vote.intention)}</select>` : `<span class="dot" style="background:${it[2]}"></span>${esc(it[1])}`}</td>
         <td class="small hide-m">${lc ? fmtDate(lc.date) + ' · ' + esc((REF.canaux.find(c => c[0] === lc.canal) || ['', ''])[1]) : '<span class="mut">—</span>'}</td>
         <td class="small hide-m">${esc(userName(p.militant))}</td>
-        <td>${p.vote.aVote ? `<span class="tag ok" title="${fmtDate(p.vote.dateVote)}">✔ ${fmtDate(p.vote.dateVote).slice(0, 5)}</span>` : ''}</td>
+        <td>${Scrutins.badge(p)}${Relais.relaisDe(p) ? ` <span class="tag" title="Relais : ${esc(P.full(Relais.relaisDe(p)))}">🤝</span>` : ''}</td>
         <td class="nowrap">${ed ? `<button class="btn sm sec" onclick="Votants.contact('${p.id}')">+ contact</button>` : ''}</td></tr>`;
     }).join('')}</tbody></table></div>${l.length > lim ? `<p><button class="btn sec" onclick="Votants.f.lim+=500;Votants.renderList()">Afficher plus (${l.length - lim})</button></p>` : ''}`;
     Votants._ids = l.slice(0, lim).map(p => p.id); UI.selInfo();
@@ -93,7 +93,7 @@ const Votants = {
         label: 'Enregistrer', onClick: m => {
           p.vote.contacts.push({ id: uid(), date: m.querySelector('#vc_d').value, canal: m.querySelector('#vc_c').value, resultat: m.querySelector('#vc_r').value, par: ME.id });
           p.vote.intention = m.querySelector('#vc_i').value; p.vote.intMaj = nowISO();
-          if (m.querySelector('#vc_v').checked && !p.vote.aVote) { p.vote.aVote = true; p.vote.dateVote = todayISO(); p.vote.sourceVote = 'déclaratif'; }
+          if (m.querySelector('#vc_v').checked && !p.vote.aVote) Scrutins.marquer(p, null, todayISO(), 'déclaratif');
           P.touch(p); log('Contact élections', P.full(p)); App.route();
         }
       }]);
@@ -103,11 +103,12 @@ const Votants = {
     return `<div class="card"><div class="kv"><div>Intention de vote</div><div>${ed ? `<select style="max-width:260px" onchange="Votants.setInt('${p.id}',this.value)">${UI.opts(REF.intentions.map(i => [i[0], i[1]]), p.vote.intention)}</select>` : esc(intention(p.vote.intention)[1])}</div>
       <div>Militant référent</div><div>${can('vot.repartir') ? `<select style="max-width:260px" onchange="P.get('${p.id}').militant=this.value;P.touch(P.get('${p.id}'))">${UI.militantsOpts(p.militant, '—')}</select>` : esc(userName(p.militant))}</div>
       <div>Inscrit sur la liste électorale</div><div>${p.vote.electeur ? 'oui (' + fmtDate(p.vote.electeur) + ')' : '<span class="mut">non vérifié</span>'}</div>
-      <div>A voté</div><div>${p.vote.aVote ? `<span class="tag ok">oui</span> le ${fmtDate(p.vote.dateVote)} <span class="small mut">(${esc(p.vote.sourceVote || '')})</span>` : 'pas encore'} ${ed ? `<button class="btn sm ghost" onclick="Votants.toggleVote('${p.id}')">${p.vote.aVote ? 'annuler' : 'marquer a voté'}</button>` : ''}</div></div>
+      <div>A voté</div><div>${Scrutins.pour(p).map(s => `<button class="btn sm ${p.vote.scrutins[s.k] ? 'ok' : 'ghost'}" style="margin:0 .2rem .2rem 0" ${ed ? `onclick="Scrutins.basculer('${p.id}','${s.k}')"` : 'disabled'} title="${p.vote.scrutins[s.k] ? 'voté le ' + fmtDate(p.vote.scrutins[s.k]) : 'pas encore'}">${p.vote.scrutins[s.k] ? '✔' : '○'} ${esc(s.nom)}</button>`).join('')} ${ed ? `<button class="btn sm ghost" onclick="Votants.toggleVote('${p.id}')">${p.vote.aVote ? 'tout annuler' : 'a voté pour tout'}</button>` : ''}<div class="small mut">${p.vote.sourceVote ? 'source : ' + esc(p.vote.sourceVote) : ''}</div></div>
+      <div>Relais</div><div>${Relais.relaisDe(p) ? `<a href="#/fiche/${Relais.relaisDe(p).id}">${esc(P.full(Relais.relaisDe(p)))}</a>` : '<span class="mut">aucun</span>'} ${can('vot.repartir') ? `<button class="btn sm ghost" onclick="Relais.definir('${p.id}')">${Relais.relaisDe(p) ? 'changer' : 'désigner un relais'}</button>` : ''}${Relais.suivis(p.id).length ? `<div class="small">Relais pour : ${Relais.suivis(p.id).map(x => esc(P.full(x))).join(', ')} · <a href="#/relais">voir</a></div>` : ''}</div></div>
       ${ed ? `<p><button class="btn" onclick="Votants.contact('${p.id}')">+ Noter un contact</button></p>` : ''}
       <h3>Contacts de campagne</h3>${p.vote.contacts.slice().reverse().map(c => `<div class="small" style="margin:.3rem 0"><b>${fmtDate(c.date)}</b> · ${esc((REF.canaux.find(x => x[0] === c.canal) || ['', c.canal])[1])} · ${esc(userName(c.par))} — ${esc(c.resultat || '')}</div>`).join('') || '<p class="mut">Aucun contact</p>'}</div>`;
   },
-  toggleVote(id) { const p = P.get(id); p.vote.aVote = !p.vote.aVote; p.vote.dateVote = p.vote.aVote ? todayISO() : ''; p.vote.sourceVote = 'manuel'; P.touch(p); App.route(); },
+  toggleVote(id) { const p = P.get(id); if (p.vote.aVote) { p.vote.scrutins = {}; Scrutins.sync(p); } else Scrutins.marquer(p, null, todayISO(), 'manuel'); P.touch(p); save(); App.route(); },
 
   /* Saisie rapide (en chaîne) */
   saisieRapide() {
@@ -265,7 +266,10 @@ const Votants = {
       const ids = new Set(p.vote.contacts.map(c => c.id));
       np.vote.contacts.forEach(c => { if (!ids.has(c.id)) { p.vote.contacts.push(c); nContacts++; } });
       if ((np.vote.intMaj || '') >= (p.vote.intMaj || '')) { p.vote.intention = np.vote.intention; p.vote.intMaj = np.vote.intMaj; }
+      Object.entries(np.vote.scrutins || {}).forEach(([k, d]) => { p.vote.scrutins = p.vote.scrutins || {}; if (!p.vote.scrutins[k]) p.vote.scrutins[k] = d; });
+      if (np.vote.relais && !p.vote.relais) p.vote.relais = np.vote.relais;
       if (np.vote.aVote && !p.vote.aVote) { p.vote.aVote = true; p.vote.dateVote = np.vote.dateVote; p.vote.sourceVote = np.vote.sourceVote; }
+      Scrutins.sync(p);
       const ch = [];
       ['email', 'telPortable', 'telFixe'].forEach(k => { if (np[k] && np[k] !== p[k]) { p[k] = np[k]; ch.push(k); } });
       if (np.notes && np.notes !== p.notes) p.notes = np.notes;
@@ -310,13 +314,20 @@ const Votants = {
     Mapper.open({
       titre: type === 'electeurs' ? 'Liste électorale — colonnes' : 'Liste des votants — colonnes', profil: 'emarg-' + type,
       intro: type === 'votants' ? 'Si le fichier contient une colonne « a voté » (oui/non), associe-la ; sinon toutes les lignes seront considérées comme ayant voté.' : '',
-      fields: [['nom', 'Nom', ['nom', 'nom usage', 'nom d usage']], ['prenom', 'Prénom', ['prenom']], ['nomNaissance', 'Nom de naissance', ['nom de naissance', 'nom patronymique']], ['dateNaissance', 'Date de naissance', ['date de naissance', 'date naissance', 'naissance']], ['etab', 'Établissement ou UAI', ['etablissement', 'uai', 'rne', 'affectation']], ['aVote', 'A voté (oui/non)', ['a vote', 'vote', 'votant', 'emargement', 'statut vote']], ['dateVote', 'Date du vote', ['date vote', 'date du vote', 'date emargement', 'horodatage']]],
+      fields: [['nom', 'Nom', ['nom', 'nom usage', 'nom d usage']], ['prenom', 'Prénom', ['prenom']], ['nomNaissance', 'Nom de naissance', ['nom de naissance', 'nom patronymique']], ['dateNaissance', 'Date de naissance', ['date de naissance', 'date naissance', 'naissance']], ['etab', 'Établissement ou UAI', ['etablissement', 'uai', 'rne', 'affectation']], ['aVote', 'A voté (oui/non)', ['a vote', 'vote', 'votant', 'emargement', 'statut vote']], ['dateVote', 'Date du vote', ['date vote', 'date du vote', 'date emargement', 'horodatage']], ['scrutin', 'Scrutin (facultatif)', ['scrutin', 'election', 'instance', 'cap', 'csa']]],
       onDone: (rows, info) => Votants.croiser(rows, info, type)
     });
   },
   async croiser(rows, info, type) {
     const dl = await UI.prompt('Date de la liste', 'Date à laquelle la liste a été arrêtée (AAAA-MM-JJ) :', todayISO(), 'date');
     if (!dl) return;
+    let scr = '';
+    if (type === 'votants') {
+      const aCol = rows.some(r => r.scrutin);
+      scr = await UI.modal('Pour quel scrutin ?', `<p class="small">Les personnes de cette liste ont voté pour :</p><div class="f"><select id="sc_k">${aCol ? '<option value="_col">le scrutin indiqué dans la colonne « Scrutin » du fichier</option>' : ''}<option value="">tous leurs scrutins (liste globale)</option>${Scrutins.liste().map(s => `<option value="${esc(s.k)}">${esc(s.nom)}</option>`).join('')}</select></div>`, [{ label: 'Annuler', value: null }, { label: 'Continuer', onClick: m => m.querySelector('#sc_k').value }]);
+      if (scr == null) return;
+    }
+    const kDe = r => { if (scr !== '_col') return scr; const t = norm(r.scrutin || ''); const s = Scrutins.liste().find(x => t && (norm(x.nom).includes(t) || t.includes(norm(x.nom.replace(/\s*\(.*\)/, ''))) || t.includes(norm(x.k)))); return s ? s.k : ''; };
     const byKey = {}, byLoose = {};
     D.personnes.forEach(p => { if (p.dateNaissance) byKey[P.key(p)] = p; [P.keyLoose(p), p.nomNaissance ? norm(p.nomNaissance) + '|' + norm(p.prenom) : null].filter(Boolean).forEach(k => (byLoose[k] = byLoose[k] || []).push(p)); });
     let rec = 0, nouv = 0; const nonTrouves = [];
@@ -334,7 +345,7 @@ const Votants = {
       if (!p) { nonTrouves.push(o); return; }
       rec++;
       if (type === 'electeurs') { p.vote.electeur = dl; }
-      else if (!p.vote.aVote) { p.vote.aVote = true; p.vote.dateVote = parseDate(r.dateVote) || dl; p.vote.sourceVote = 'liste du ' + fmtDate(dl); nouv++; }
+      else { const avant = Scrutins.etat(p).faits.length; Scrutins.marquer(p, kDe(r), parseDate(r.dateVote) || dl, 'liste du ' + fmtDate(dl)); if (Scrutins.etat(p).faits.length > avant) nouv++; }
     });
     D.emargements.push({ id: uid(), date: nowISO(), dateListe: dl, type, fichier: info.fichier, lignes: rows.length, reconnus: rec, nouveaux: nouv, par: ME.id });
     log(type === 'electeurs' ? 'Liste électorale importée' : 'Liste des votants importée', `${info.fichier} : ${rec} reconnus, ${nouv} nouveaux votants`);
