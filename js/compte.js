@@ -31,10 +31,15 @@ const Compte = {
     const q = norm(($('#mc_q') || {}).value || ''); const box = $('#mc_res'); if (!box) return;
     if (q.length < 2) { box.innerHTML = ''; return; }
     const l = D.personnes.filter(p => !p.archive && norm(P.full(p)).includes(q)).slice(0, 8);
-    box.innerHTML = l.length ? l.map(p => `<div style="padding:.3rem 0;border-bottom:1px solid #eee">${esc(P.full(p))} · ${esc(P.etab(p) || '')} ${p.email ? '· ' + esc(p.email) : ''} ${Droits.userDe(p) && Droits.userDe(p).id !== ME.id ? '<span class="tag w">déjà reliée à un autre compte</span>' : `<button class="btn sm" onclick="Compte.lier('${p.id}')">${ME.pid === p.id ? '✓ reliée' : 'C\'est ma fiche'}</button>`}</div>`).join('') : '<span class="mut">Aucune fiche trouvée.</span>';
+    box.innerHTML = l.length ? l.map(p => `<div style="padding:.3rem 0;border-bottom:1px solid #eee">${esc(P.full(p))} · ${esc(P.etab(p) || '')} ${p.email ? '· ' + esc(p.email) : ''} ${Droits.userDe(p) && Droits.userDe(p).id !== ME.id ? (Droits.roles(ME).includes('admin') && !Droits.roles(Droits.userDe(p)).includes('admin') ? `<button class="btn sm" onclick="Compte.lier('${p.id}',true)">C'est ma fiche</button> <span class="small mut">(l'accès invité créé sur cette fiche sera supprimé)</span>` : '<span class="tag w">déjà reliée à un autre compte</span>') : `<button class="btn sm" onclick="Compte.lier('${p.id}')">${ME.pid === p.id ? '✓ reliée' : 'C\'est ma fiche'}</button>`}</div>`).join('') : '<span class="mut">Aucune fiche trouvée.</span>';
   },
-  async lier(pid) {
+  async lier(pid, remplacer) {
     const p = P.get(pid); const u = ME;
+    const autre = Droits.userDe(p);
+    if (autre && autre.id !== u.id) {
+      if (!remplacer || !await UI.confirm(`Cette fiche est déjà reliée à un accès « ${esc(autre.prenom + ' ' + autre.nom)} » (${esc(Droits.libelle(autre))}). Le supprimer et relier ton compte administrateur à la place ?`, 'Supprimer et relier')) return;
+      D.users = D.users.filter(x => x.id !== autre.id); log('Accès supprimé', autre.prenom + ' ' + autre.nom + ' (remplacé par le compte administrateur)');
+    }
     u.pid = p.id; u.prenom = p.prenom || u.prenom; u.nom = (p.nom || u.nom).toUpperCase(); if (p.telPortable) u.tel = p.telPortable;
     log('Compte relié à sa fiche', P.full(p));
     const estAdmin = Droits.roles(u).includes('admin') || u.role === 'admin';
