@@ -44,7 +44,8 @@ const Droits = {
       <div class="kv"><div>Fonctions donnant des droits</div><div>${fonctions.map(m => `<span class="tag v">${esc(Mandats.libelle(m))}</span>`).join(' ') || '<span class="mut">aucune (désigne la personne dans l\'onglet Mandats)</span>'}</div></div>`;
     if (!u) {
       const libres = D.users.filter(x => !x.pid);
-      h += `<p style="margin-top:1rem"><button class="btn" onclick="Droits.creer('${p.id}')">✉ Ouvrir un accès (invitation sécurisée)</button>
+      h += `<p style="margin-top:1rem"><button class="btn" onclick="Droits.militant('${p.id}')">🗳 Désigner comme militant (élections)</button> <button class="btn sec" onclick="Droits.creer('${p.id}')">✉ Ouvrir un accès (invitation sécurisée)</button></p>
+        <p class="small mut">« Militant » : la personne apparaît dans la répartition des électeurs à contacter. Elle peut travailler sur papier (listes imprimées), avec un paquet militant, ou sur son téléphone si tu lui envoies ensuite une invitation.</p><p>
         ${libres.length ? ` ou relier un compte existant : <select id="dr_lien" style="width:auto">${UI.opts(libres.map(x => [x.id, x.prenom + ' ' + x.nom]), '', '—')}</select> <button class="btn sm sec" onclick="Droits.relier('${p.id}')">Relier</button>` : ''}</p></div>`;
       return h;
     }
@@ -67,6 +68,21 @@ const Droits = {
     const u = { id: uid(), pid, prenom: p.prenom, nom: p.nom, email: p.email, tel: p.telPortable, role: 'aucun', salt: '', pin: '', actif: true, perimetre: { etabs: [], deps: [] }, permsPlus: [], permsMoins: [], created: nowISO() };
     D.users.push(u); save(); log('Accès créé', P.full(p) + ' (' + Droits.libelle(u) + ')'); UI.renderNav();
     App.route(); Secu.inviter(u.id);
+  },
+  /* désigner un militant : compte sans code (pas de connexion tant qu'aucune invitation n'est activée) */
+  militant(pid) {
+    const p = P.get(pid); let u = Droits.userDe(p);
+    if (u) { if (!u.role || u.role === 'aucun') u.role = 'militant'; u.actif = true; }
+    else { u = { id: uid(), pid, prenom: p.prenom, nom: (p.nom || '').toUpperCase(), email: p.email, tel: p.telPortable, role: 'militant', salt: '', pin: '', actif: true, perimetre: { etabs: [], deps: [] }, permsPlus: [], permsMoins: [], created: nowISO() }; D.users.push(u); }
+    if (p.categorie === 'adherent' || p.categorie === 'sympathisant') P.touch(p);
+    save(); log('Désignation militant', P.full(p)); UI.toast(P.full(p) + ' est désigné·e militant·e', 'g'); UI.renderNav(); App.route();
+  },
+  async choisirMilitant() {
+    const r = await UI.modal('Désigner un militant', `<div class="f"><label>Rechercher la fiche (nom, prénom)</label><input id="dm_q" oninput="Droits._chercherMil()"></div><div id="dm_res" class="small"></div>`, [{ label: 'Fermer', value: null }]);
+  },
+  _chercherMil() {
+    const q = norm($('#dm_q').value); const box = $('#dm_res'); if (q.length < 2) { box.innerHTML = ''; return; }
+    box.innerHTML = D.personnes.filter(p => !p.archive && norm(P.full(p)).includes(q)).slice(0, 10).map(p => { const u = Droits.userDe(p); return `<div style="padding:.3rem 0;border-bottom:1px solid #eee">${esc(P.full(p))} · ${esc(P.etab(p) || '')} ${u && u.actif !== false ? '<span class="tag ok">déjà dans la liste</span>' : `<button class="btn sm" onclick="UI.close();Droits.militant('${p.id}')">Désigner</button>`}</div>`; }).join('') || '<span class="mut">Aucune fiche.</span>';
   },
   relier(pid) { const id = $('#dr_lien').value; const u = D.users.find(x => x.id === id); if (!u) return; u.pid = pid; const pf = P.get(pid); if (pf) { u.prenom = pf.prenom || u.prenom; u.nom = (pf.nom || u.nom).toUpperCase(); } save(); log('Compte relié à une fiche', u.prenom + ' ' + u.nom); Droits.rafraichir(); UI.renderNav(); App.route(); },
   async delier(id) { const u = D.users.find(x => x.id === id); if (!await UI.confirm('Délier le compte de cette fiche ? Il perd les droits liés aux mandats.', 'Délier')) return; u.pid = null; save(); App.route(); },
