@@ -444,6 +444,7 @@ const UI = {
     n.push(['import', 'Import & assainissement', '⇪', 'adh.importer', 'Adhérents']);
     n.push(['national', 'Différences → national', '⇄', 'adh.national', 'Adhérents', () => Adh.countDiffs()]);
     n.push(['majadh', 'Mises à jour par l\'adhérent', '✉', 'adh.modifier', 'Adhérents']);
+    n.push(['doublons', 'Doublons', '⧉', 'adh.modifier', 'Adhérents', () => Doublons.detecter().length]);
     n.push(['cotisations', 'Cotisations & relances', '€', 'adh.cotis', 'Adhérents']);
     n.push(['votants', 'Cahier de votants', '☑', 'vot.voir', 'Élections 2026']);
     n.push(['repartition', 'Répartition militants', '⚑', 'vot.repartir', 'Élections 2026']);
@@ -505,6 +506,7 @@ const App = {
     D = await Store.get('db');
     if (!D) { D = defaultDB(); }
     migrate(); await _saveNow();
+    if (/[?&]code=/.test(location.search) && typeof Sauv !== 'undefined') await Sauv.retourOAuth();
     if ('serviceWorker' in navigator && /^https?:/.test(location.protocol)) navigator.serviceWorker.register('sw.js').catch(() => { });
     window.addEventListener('hashchange', () => App.route());
     window.addEventListener('beforeunload', () => { if (D) Store.set('db', JSON.parse(JSON.stringify(D))); });

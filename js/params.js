@@ -271,9 +271,16 @@ const Params = {
     download(`sauvegarde_SNETAA-FO_OT_${todayISO()}.snetaa`, txt, 'application/json');
     save(); log('Sauvegarde', pass ? 'chiffrée' : 'non chiffrée'); App.route();
   },
+  async restaurerTexte(txt) {
+    let o; try { o = JSON.parse(txt); } catch (e) { return UI.toast('Fichier illisible', 'r'); }
+    if (o && o.snetaaEnc) { const pass = await UI.prompt('Sauvegarde chiffrée', 'Mot de passe de la sauvegarde :', '', 'password'); if (pass == null) return; try { o = await Crypto.decrypt(txt, pass); } catch (e) { return UI.toast('Mot de passe incorrect', 'r'); } }
+    return Params._appliquer(o);
+  },
   async restaurer() {
     const f = await pickFile('.snetaa,.json'); if (!f) return;
-    let o; try { o = await readJSONMaybeEncrypted(f); } catch (e) { return UI.toast(e.message, 'r'); }
+    return Params.restaurerTexte(await readFile(f, 'text'));
+  },
+  async _appliquer(o) {
     if (!o || !o.meta || !Array.isArray(o.personnes) || !Array.isArray(o.users)) return UI.toast('Ce fichier n\'est pas une sauvegarde de l\'application', 'r');
     if (D.users.length && !await UI.confirm(`Remplacer toutes les données actuelles par la sauvegarde du ${fmtDT(o.meta.lastBackup)} (${o.personnes.length} fiches) ?`, 'Restaurer')) return;
     D = o; migrate(); await _saveNow(); sessionStorage.removeItem('snetaa-session'); UI.toast('Sauvegarde restaurée : reconnecte-toi', 'g'); ME = null; Auth.render();
@@ -308,6 +315,5 @@ const Params = {
   }
 };
 App.routes.params = () => Params.page();
-App.routes.sauvegarde = () => Params.sauvegarde();
 App.routes.journal = () => Params.journal();
 App.routes.aide = () => Params.aide();

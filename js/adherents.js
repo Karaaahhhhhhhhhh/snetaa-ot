@@ -45,7 +45,8 @@ const Adh = {
     if (p.changementAcademie && !p.changementAcademie.notifie) r.academie = p.changementAcademie;
     if (p.autreAcademie && !p.autreAcademie.notifie) r.autreAcad = p.autreAcademie;
     if (p.emailInvalide && !p.emailInvalide.signale) r.email = true;
-    return (r.diffs.length || r.nouveau || r.academie || r.email || r.autreAcad) ? r : null;
+    r.fusions = (p.fusions || []).filter(f => !f.signale);
+    return (r.diffs.length || r.fusions.length || r.nouveau || r.academie || r.email || r.autreAcad) ? r : null;
   },
   countDiffs() { return D.personnes.filter(p => Adh.aSignaler(p)).length; },
   filtreRapide(flag) { Adh.f = Object.assign({}, Adh.f, { flag, q: '', cat: '', cotis: '' }); App.go('adherents'); setTimeout(App.route, 0); },
@@ -238,6 +239,7 @@ const Adh = {
       can('adh.national') ? b('⇄ Changement d\'académie (mail au national et à l\'académie)', `Adh.changementAcademie('${id}')`) : '',
       can('adh.national') ? b('⇄ Adhérent encore enregistré dans une autre académie', `Adh.autreAcademie('${id}')`) : '',
       b('✉ Demander à l\'adhérent de vérifier ses informations', `MajAdh.demande(['${id}'])`),
+      b('⧉ Fusionner avec une autre fiche (doublon)', `Doublons.choisirAutre('${id}')`),
       p.archive ? b('Désarchiver la fiche', `Adh.archiver('${id}',false)`) : b('Archiver la fiche (ne fait plus partie du fichier)', `Adh.archiver('${id}',true)`),
       can('adm.params') ? b('Supprimer définitivement', `Adh.supprimer('${id}')`, 'red') : ''
     ].join(''), []);
@@ -502,6 +504,7 @@ const National = {
       if (r.nouveau) rows.push(['Adhérent absent du fichier national', '', 'à créer']);
       if (r.autreAcad) rows.push(['Encore enregistré à ' + r.autreAcad.academie, r.autreAcad.academie, D.meta.syndicat.academie]);
       if (r.academie) rows.push(['Changement d\'académie', r.academie.ancienne, r.academie.nouvelle]);
+      r.fusions.forEach(f => rows.push(['Doublon dans le fichier national (fiche fusionnée)', 'n° ' + f.num, 'garder le n° ' + (r.p.numAdherent || '?')]));
       if (r.email) rows.push(['Adresse mail en erreur', r.p.emailInvalide.email || r.p.email, 'adresse à vérifier']);
       r.diffs.forEach(d => rows.push([d.l, d.avant, d.apres]));
       return rows.map((x, i) => `<tr>${i === 0 ? `<td rowspan="${rows.length}"><a href="#/fiche/${r.p.id}"><b>${esc(P.full(r.p))}</b></a><br><span class="small mut">${esc(r.p.numAdherent || '')}</span></td>` : ''}<td>${esc(x[0])}</td><td><span class="diffold">${esc(x[1])}</span></td><td><span class="diffnew">${esc(x[2])}</span></td></tr>`).join('');
@@ -516,6 +519,7 @@ const National = {
       if (r.nouveau) out.push(Object.assign({}, base, { Nature: 'Nouvel adhérent à créer', 'Valeur actuelle (fichier national)': '', 'Valeur corrigée': [STATUT(r.p.statut)[1], r.p.discipline, P.etabs(r.p), r.p.email, r.p.telPortable].filter(Boolean).join(' / ') }));
       if (r.autreAcad) out.push(Object.assign({}, base, { Nature: 'Rattachement académique', 'Valeur actuelle (fichier national)': r.autreAcad.academie, 'Valeur corrigée': D.meta.syndicat.academie }));
       if (r.academie) out.push(Object.assign({}, base, { Nature: 'Changement d\'académie', 'Valeur actuelle (fichier national)': r.academie.ancienne, 'Valeur corrigée': r.academie.nouvelle + (r.academie.date ? ' au ' + fmtDate(r.academie.date) : '') }));
+      r.fusions.forEach(f => out.push(Object.assign({}, base, { Nature: 'Doublon : fiche n° ' + f.num + ' à supprimer (même personne)', 'Valeur actuelle (fichier national)': 'n° ' + f.num, 'Valeur corrigée': 'n° ' + (r.p.numAdherent || '') })));
       if (r.email) out.push(Object.assign({}, base, { Nature: 'Adresse mail en erreur', 'Valeur actuelle (fichier national)': r.p.emailInvalide.email || '', 'Valeur corrigée': r.p.email !== r.p.emailInvalide.email ? r.p.email : 'à vérifier' }));
       const lib = (f, v) => f === 'statut' ? STATUT(v)[1] : f === 'classe' ? Carriere.classe(v) : f === 'datePromo' ? fmtDate(v) : v;
       r.diffs.forEach(d => out.push(Object.assign({}, base, { Nature: d.l, 'Valeur actuelle (fichier national)': lib(d.f, d.avant), 'Valeur corrigée': lib(d.f, d.apres) })));
@@ -537,6 +541,7 @@ const National = {
       r.diffs.forEach(d => p.signale[d.f] = d.apres);
       if (r.nouveau) p.signale.__nouveau = todayISO();
       if (r.email) p.emailInvalide.signale = todayISO();
+      (p.fusions || []).forEach(f => { if (!f.signale) f.signale = todayISO(); });
       if (r.academie) { p.changementAcademie.notifie = todayISO(); if (p.changementAcademie.archiver) p.archive = todayISO(); }
       if (r.autreAcad) p.autreAcademie.notifie = todayISO();
     });
