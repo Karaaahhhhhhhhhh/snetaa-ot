@@ -91,7 +91,7 @@ const Pubs = {
   ligne(x) { return '• ' + x.titre + (x.url ? ' : ' + x.url : '') + (x.fichier && !x.url ? ' (document joint)' : ''); },
   epinglees() { return Pubs.liste().filter(x => x.epingle && x.categorie !== 'Bulletin d\'adhésion'); },
   faireAdherer() {
-    const ids = P.visibles().filter(p => !p.archive && p.statut !== 'RETR' && (p.categorie === 'sympathisant' || (p.categorie === 'adherent' && ['ancien', 'retard'].includes(P.cotis(p))))).map(p => p.id);
+    const ids = P.visibles().filter(Adh.cibleAdhesion).map(p => p.id);
     Comm.envoyerSelection(ids, null, 'adhesion');
   }
 };

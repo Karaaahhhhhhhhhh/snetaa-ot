@@ -30,6 +30,9 @@ const Adh = {
     const r = Math.min(99, ...Mandats.de(p).map(m => Adh.RANG[m.type] || 50));
     if (r < 99) return r; const a = Adh.acces(p); return a === 'designe' ? 60 : a ? 70 : 99;
   },
+  /* à faire adhérer : sympathisants et contacts actifs, anciens adhérents et adhérents en retard (hors retraités, décédés, refus) */
+  refusAdhesion(id, v) { const p = P.get(id); p.refusAdhesion = v ? todayISO() : null; P.touch(p); save(); log(v ? 'Ne souhaite pas adhérer' : 'Remis dans « À faire adhérer »', P.full(p)); UI.toast(v ? 'Retiré de la liste « À faire adhérer »' : 'Remis dans la liste « À faire adhérer »', 'g'); App.route(); },
+  cibleAdhesion(p) { return !p.archive && p.statut !== 'RETR' && !p.refusAdhesion && (p.categorie === 'sympathisant' || p.categorie === 'contact' || (p.categorie === 'adherent' && ['ancien', 'retard'].includes(P.cotis(p)))); },
   estMilitant(p) { return Mandats.de(p).length > 0 || !!Adh.acces(p); },
   fonctionOk(p, f) {
     const t = Mandats.de(p).map(m => m.type), a = Adh.acces(p);
@@ -38,15 +41,16 @@ const Adh = {
       case 'S3': return t.some(x => /^S3/.test(x)); case 'S2': return t.some(x => /^S2/.test(x)); case 'S1': return t.some(x => /^S1/.test(x));
       case 'TRES': return t.some(x => /^TRES/.test(x)); case 'BUR': return t.some(x => x === 'BUR' || x === 'REP');
       case '_designe': return !t.length && !!a; case '_acces': return a === 'actif'; case '_invite': return a === 'invite';
-      case '_aucun': return !Adh.estMilitant(p); default: return true;
+      case '_aucun': return !Adh.estMilitant(p);
+      case '_adh': return Adh.cibleAdhesion(p); case '_cahier': return p.origine === 'cahier'; default: return true;
     }
   },
   badgeAcces(p) { const a = Adh.acces(p); return a === 'actif' ? '<span class="tag ok" title="Utilise l\'application">🔑 accès</span>' : a === 'invite' ? '<span class="tag w" title="Invitation envoyée, pas encore activée">✉ invité</span>' : a === 'designe' ? '<span class="tag" title="Militant désigné, sans accès à l\'application">militant</span>' : ''; },
-  FONCS: [['_mil', 'Tous les militants'], ['S3', 'S3 – secrétariat académique'], ['S2', 'S2 – secrétaires départementaux'], ['S1', 'S1 – délégués d\'établissement'], ['TRES', 'Trésorerie'], ['BUR', 'Bureau / représentants'], ['_designe', 'Militants sans mandat'], ['_acces', 'Ayant accès à l\'application'], ['_invite', 'Invitation en attente'], ['_aucun', 'Sans fonction']],
+  FONCS: [['_mil', 'Tous les militants'], ['S3', 'S3 – secrétariat académique'], ['S2', 'S2 – secrétaires départementaux'], ['S1', 'S1 – délégués d\'établissement'], ['TRES', 'Trésorerie'], ['BUR', 'Bureau / représentants'], ['_designe', 'Militants sans mandat'], ['_acces', 'Ayant accès à l\'application'], ['_invite', 'Invitation en attente'], ['_aucun', 'Sans fonction'], ['_adh', '🎯 À faire adhérer'], ['_cahier', 'Ajoutés depuis le cahier de votants']],
   chipsFonction() {
     const vis = P.visibles(), f = Adh.f.fonc;
     const n = k => vis.filter(p => Adh.fonctionOk(p, k)).length;
-    return [['_mil', '★ Militants'], ['S3', 'S3'], ['S2', 'S2'], ['S1', 'S1'], ['TRES', 'Trésorerie'], ['_acces', '🔑 Accès appli'], ['_invite', '✉ Invités']].map(([k, l]) => { const c = n(k); return c || f === k ? `<button class="btn sm ${f === k ? '' : 'sec'}" onclick="Adh.setF('fonc', Adh.f.fonc === '${k}' ? '' : '${k}'); Adh.renderChips()">${l} <b>${c}</b></button>` : ''; }).join(' ');
+    return [['_mil', '★ Militants'], ['S3', 'S3'], ['S2', 'S2'], ['S1', 'S1'], ['TRES', 'Trésorerie'], ['_acces', '🔑 Accès appli'], ['_invite', '✉ Invités'], ['_adh', '🎯 À faire adhérer'], ['_cahier', '🗳 Ajoutés au cahier']].map(([k, l]) => { const c = n(k); return c || f === k ? `<button class="btn sm ${f === k ? '' : 'sec'}" onclick="Adh.setF('fonc', Adh.f.fonc === '${k}' ? '' : '${k}'); Adh.renderChips()">${l} <b>${c}</b></button>` : ''; }).join(' ');
   },
   renderChips() { const el = $('#adhchips'); if (el) el.innerHTML = Adh.chipsFonction(); const sel = $('#adhfonc'); if (sel) sel.value = Adh.f.fonc || ''; },
   val(p, f) {
@@ -276,6 +280,7 @@ const Adh = {
       can('adh.national') ? b('⇄ Adhérent encore enregistré dans une autre académie', `Adh.autreAcademie('${id}')`) : '',
       b('✉ Demander à l\'adhérent de vérifier ses informations', `MajAdh.demande(['${id}'])`),
       b('⧉ Fusionner avec une autre fiche (doublon)', `Doublons.choisirAutre('${id}')`),
+      p.categorie !== 'adherent' || ['ancien', 'retard'].includes(P.cotis(p)) ? (p.refusAdhesion ? b('🎯 Remettre dans la liste « À faire adhérer »', `Adh.refusAdhesion('${id}',false)`) : b('🚫 Ne souhaite pas adhérer (retirer de la liste « À faire adhérer »)', `Adh.refusAdhesion('${id}',true)`)) : '',
       p.archive ? b('Désarchiver la fiche', `Adh.archiver('${id}',false)`) : b('Archiver la fiche (ne fait plus partie du fichier)', `Adh.archiver('${id}',true)`),
       can('adm.params') ? b('Supprimer définitivement', `Adh.supprimer('${id}')`, 'red') : ''
     ].join(''), []);

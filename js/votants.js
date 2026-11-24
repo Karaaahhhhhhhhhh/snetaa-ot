@@ -126,7 +126,7 @@ const Votants = {
     const ev = g('#sr_etab'); let aff = [];
     if (ev) { const uai = (ev.match(/\b\d{7}[A-Z]\b/i) || [])[0]; const e = uai ? D.etablissements.find(x => x.uai === uai.toUpperCase()) : null; aff = [e ? { uai: e.uai, nom: e.nom, ville: e.ville, principal: true } : { uai: uai || '', nom: ev.split(' — ')[0].replace(/\s*\([^)]*\)\s*$/, ''), ville: ((ev.match(/\(([^)]*)\)\s*$/) || [])[1] || ''), principal: true }]; }
     const st = g('#sr_st');
-    const p = P.nouveau({ categorie: g('#sr_cat'), nom: g('#sr_nom').toUpperCase(), prenom: cap(g('#sr_prenom')), statut: st, discipline: Import.discFromText(g('#sr_disc'), st) || g('#sr_disc').toUpperCase(), affectations: aff, telPortable: normPhone(g('#sr_tel')), email: normEmail(g('#sr_mail')), militant: g('#sr_mil'), notes: g('#sr_note'), ajoutManuel: g('#sr_cat') === 'adherent' });
+    const p = P.nouveau({ categorie: g('#sr_cat'), nom: g('#sr_nom').toUpperCase(), prenom: cap(g('#sr_prenom')), statut: st, discipline: Import.discFromText(g('#sr_disc'), st) || g('#sr_disc').toUpperCase(), affectations: aff, telPortable: normPhone(g('#sr_tel')), email: normEmail(g('#sr_mail')), militant: g('#sr_mil'), notes: g('#sr_note'), ajoutManuel: g('#sr_cat') === 'adherent', origine: 'cahier', dateAjout: todayISO() });
     p.vote.intention = g('#sr_int');
     D.personnes.push(p); P.touch(p); log('Saisie rapide', P.full(p));
     Votants._lastEtab = ev; Votants._lastSt = st; Votants._lastMil = g('#sr_mil'); Votants._lastCat = g('#sr_cat');
