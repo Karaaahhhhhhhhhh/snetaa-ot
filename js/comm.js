@@ -3,7 +3,7 @@
    ========================================================= */
 'use strict';
 const Comm = {
-  VARS: [['prenom', 'Prénom'], ['nom', 'Nom'], ['civilite', 'Civilité'], ['etablissement', 'Établissement'], ['discipline', 'Discipline'], ['militant', 'Militant référent'], ['militant_tel', 'Tél. du militant'], ['date_debut', 'Début du vote'], ['date_fin', 'Fin du vote'], ['jours_restants', 'Jours restants'], ['periode', 'Période de cotisation'], ['tel_syndicat', 'Tél. syndicat'], ['mail_syndicat', 'Mail syndicat'], ['signature', 'Signature'], ['bloc_maj', 'Bloc « vos informations »'], ['delegue', 'Délégué S1 de l\'établissement'], ['delegue_tel', 'Tél. du délégué S1'], ['montant_cotisation', 'Montant de cotisation'], ['cout_reel', 'Coût après crédit d\'impôt'], ['bulletin_adhesion', 'Lien du bulletin d\'adhésion'], ['publications', 'Publications épinglées']],
+  VARS: [['prenom', 'Prénom'], ['nom', 'Nom'], ['civilite', 'Civilité'], ['etablissement', 'Établissement'], ['discipline', 'Discipline'], ['militant', 'Militant référent'], ['militant_tel', 'Tél. du militant'], ['date_debut', 'Début du vote'], ['date_fin', 'Fin du vote'], ['jours_restants', 'Jours restants'], ['periode', 'Période de cotisation'], ['tel_syndicat', 'Tél. syndicat'], ['mail_contact', 'Courriel institutionnel / questions sensibles (contact@)'], ['mail_syndicat', 'Mail syndicat'], ['signature', 'Signature'], ['bloc_maj', 'Bloc « vos informations »'], ['delegue', 'Délégué S1 de l\'établissement'], ['delegue_tel', 'Tél. du délégué S1'], ['montant_cotisation', 'Montant de cotisation'], ['cout_reel', 'Coût après crédit d\'impôt'], ['bulletin_adhesion', 'Lien du bulletin d\'adhésion'], ['publications', 'Publications épinglées']],
   defaultModeles() {
     const m = (id, canal, cat, nom, objet, corps) => ({ id, canal, cat, nom, objet, corps });
     return [
@@ -40,7 +40,7 @@ const Comm = {
       delegue: s1 ? P.full(s1.p) : (mil ? (mil.prenom + ' ' + mil.nom).trim() : ''), delegue_tel: s1 ? (s1.p.telPortable || s.tel) : ((mil && mil.tel) || s.tel),
       prenom: p ? p.prenom : '', nom: p ? p.nom : '', civilite: p ? (p.civilite === 'M.' ? 'Monsieur' : p.civilite === 'Mme' ? 'Madame' : '') : '',
       etablissement: p ? P.etab(p) : '', discipline: p ? discLabel(p.discipline) : '', militant: mil ? (mil.prenom + ' ' + mil.nom).trim() : '', militant_tel: (mil && mil.tel) || s.tel,
-      date_debut: fmtDate(el.debut), date_fin: fmtDate(el.fin), jours_restants: jr, periode: P.periode(p ? p.calendrier : 'scolaire'), tel_syndicat: s.tel, mail_syndicat: s.mail, signature: s.signature, bloc_maj: p ? MajAdh.bloc(p) : ''
+      date_debut: fmtDate(el.debut), date_fin: fmtDate(el.fin), jours_restants: jr, periode: P.periode(p ? p.calendrier : 'scolaire'), tel_syndicat: s.tel, mail_syndicat: s.mail, mail_contact: s.mailContact || s.mail, signature: s.signature, bloc_maj: p ? MajAdh.bloc(p) : ''
     };
     return String(t || '').replace(/\{(\w+)\}/g, (m, k) => v[k] !== undefined ? v[k] : m).replace(/Bonjour ,/g, 'Bonjour,').replace(/^ , /gm, '');
   },

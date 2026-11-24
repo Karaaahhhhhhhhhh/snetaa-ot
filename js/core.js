@@ -3,7 +3,7 @@
    Noyau : données, référentiels, comptes, droits, navigation
    ========================================================= */
 'use strict';
-const APP_VERSION = '2026-11-24 n°19';
+const APP_VERSION = '2026-11-24 n°20';
 
 /* ---------- Utilitaires ---------- */
 const $ = (s, r = document) => r.querySelector(s);
@@ -261,6 +261,7 @@ function log(action, detail) {
   save();
 }
 function migrate() {
+  if (D.meta && D.meta.syndicat && D.meta.syndicat.mailContact === undefined && /snetaaot\.org$/.test(D.meta.syndicat.mail || '')) D.meta.syndicat.mailContact = 'contact@snetaaot.org';
   const def = defaultDB();
   for (const k of Object.keys(def)) if (D[k] === undefined) D[k] = def[k];
   for (const k of Object.keys(def.meta)) if (D.meta[k] === undefined) D.meta[k] = def.meta[k];
