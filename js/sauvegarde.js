@@ -58,7 +58,7 @@ const Sauv = {
         <li>Onglet <b>Paramètres</b> <span class="mut">(« Settings »)</span>, rubrique <b>OAuth 2</b> :<br>– dans <b>URI de redirection</b> <span class="mut">(« Redirect URIs »)</span>, colle exactement <code>${esc(Sauv.adresseEnLigne())}</code> puis clique sur <b>Ajouter</b> <span class="mut">(« Add »)</span> ;<br>– vérifie que <b>Autoriser les clients publics</b> <span class="mut">(« Allow public clients (Implicit Grant &amp; PKCE) »)</span> est sur <b>Autoriser</b> <span class="mut">(« Allow »)</span>.</li>
         <li>Toujours dans <b>Paramètres</b>, copie la <b>Clé de l'application</b> <span class="mut">(« App key »)</span> — pas le « secret » — colle-la ci-dessus, puis clique sur « Connecter mon Dropbox ».</li></ol>
         ${location.protocol === 'file:' ? `<div class="alert small"><b>Important :</b> Dropbox refuse les adresses du type <code>file:///C:/…</code>. La connexion à Dropbox doit se faire depuis la <b>version en ligne</b> de l'application : <a href="${esc(Sauv.adresseEnLigne())}" target="_blank" rel="noopener">${esc(Sauv.adresseEnLigne())}</a>. Les données de la version locale et de la version en ligne sont séparées : fais d'abord une sauvegarde ici, puis « Restaurer une sauvegarde » dans la version en ligne, et utilise désormais celle-ci (installable avec son icône).</div>` : ''}
-        <div class="f"><label>Nom donné à l'application Dropbox (pour l'affichage)</label><input value="${esc(D.meta.dropboxApp || '')}" onchange="D.meta.dropboxApp=this.value.trim();save()"></div></details>`;
+        <div class="f"><label>Nom donné à l'application Dropbox (pour l'affichage)</label><input value="${esc(D.meta.dropboxApp || '')}" onchange="D.meta.dropboxApp=this.value.trim();save()"></div></details>${Equipe.carteAdmin()}`;
     Sauv.majDossier();
   },
 
@@ -128,6 +128,7 @@ const Sauv = {
       const r = await fetch('https://content.dropboxapi.com/2/files/upload', { method: 'POST', headers: { Authorization: 'Bearer ' + await Sauv.jeton(), 'Content-Type': 'application/octet-stream', 'Dropbox-API-Arg': JSON.stringify({ path: '/' + Sauv.nomFichier(), mode: 'add', autorename: true }) }, body: await Sauv.contenu(pass) });
       if (!r.ok) throw new Error('réponse ' + r.status);
       UI.toast('Sauvegarde chiffrée envoyée sur Dropbox', 'g'); Sauv.fin('Dropbox', true);
+      if (typeof Equipe !== 'undefined' && can('adm.users') && Equipe.membres().length && await UI.confirm('Publier aussi la mise à jour pour les membres de l\'équipe (' + Equipe.membres().length + ') ?', 'Publier')) Equipe.publier();
     } catch (e) { UI.toast('Échec de l\'envoi : ' + e.message, 'r'); }
   },
   async restaurerDropbox() {

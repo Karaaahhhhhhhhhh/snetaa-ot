@@ -234,11 +234,16 @@ const Votants = {
     if (pk.disciplines) D.disciplines = pk.disciplines;
     await _saveNow(); UI.toast('Paquet ouvert : ' + plural(pk.personnes.length, 'contact'), 'g'); Auth.render();
   },
+  donneesRetour() {
+    const dp = (D.meta.paquet && D.meta.paquet.date) || '';
+    const l = D.personnes.filter(p => p.militant === ME.id || (p.created || '') > dp || (p.maj || '') > dp || (p.vote.contacts || []).some(c => (c.date || '') >= dp.slice(0, 10)));
+    const ret = { type: 'retour-militant', version: 1, date: nowISO(), militant: { id: ME.id, prenom: ME.prenom, nom: ME.nom }, personnes: l.map(p => ({ id: p.id, nom: p.nom, prenom: p.prenom, civilite: p.civilite, categorie: p.categorie, statut: p.statut, discipline: p.discipline, affectations: p.affectations, email: p.email, telPortable: p.telPortable, telFixe: p.telFixe, notes: p.notes, vote: p.vote, interventions: p.interventions, messages: p.messages, created: p.created, localEdits: p.localEdits })) };
+    return ret;
+  },
   async exporterRetour() {
-    const l = D.personnes.filter(p => p.militant === ME.id || p.created > (D.meta.paquet && D.meta.paquet.date || ''));
+    const ret = Votants.donneesRetour();
     const pass = await UI.prompt('Renvoyer mon retour', 'Mot de passe pour protéger le fichier (le même que celui du paquet, par exemple) :', '', 'text');
     if (pass == null) return;
-    const ret = { type: 'retour-militant', version: 1, date: nowISO(), militant: { id: ME.id, prenom: ME.prenom, nom: ME.nom }, personnes: l.map(p => ({ id: p.id, nom: p.nom, prenom: p.prenom, civilite: p.civilite, categorie: p.categorie, statut: p.statut, discipline: p.discipline, affectations: p.affectations, email: p.email, telPortable: p.telPortable, telFixe: p.telFixe, notes: p.notes, vote: p.vote, interventions: p.interventions, messages: p.messages, created: p.created, localEdits: p.localEdits })) };
     const txt = pass && Crypto.ok() ? await Crypto.encrypt(ret, pass) : JSON.stringify(ret);
     download(`retour_${norm(ME.prenom + '_' + ME.nom).replace(/ /g, '_')}_${todayISO()}.snetaa`, txt, 'application/json');
     UI.modal('Retour prêt', `<p>Le fichier a été téléchargé. Envoie-le par mail au responsable (${esc(D.meta.syndicat.mail)}) et communique-lui le mot de passe par SMS.</p>`, [{ label: 'OK' }]);
@@ -246,7 +251,13 @@ const Votants = {
   async importerRetour() {
     const f = await pickFile('.snetaa,.json'); if (!f) return;
     let r; try { r = await readJSONMaybeEncrypted(f); } catch (e) { return UI.toast(e.message, 'r'); }
+    if (r && r.type === 'retour-equipe') { const u = D.users.find(x => x.id === r.userId); if (!u || !u.invitation || !u.invitation.secret) return UI.toast('Expéditeur inconnu', 'r'); try { r = await Crypto.decrypt(r.data, u.invitation.secret); } catch (e) { return UI.toast('Retour illisible (clé)', 'r'); } }
     if (!r || r.type !== 'retour-militant') return UI.toast('Ce fichier n\'est pas un retour de militant', 'r');
+    const st = Votants.appliquerRetour(r);
+    UI.modal('Retour intégré', `<p>Retour de <b>${esc(r.militant.prenom + ' ' + r.militant.nom)}</b> du ${fmtDT(r.date)} :</p><ul><li>${st.nMaj} fiches mises à jour</li><li>${st.nContacts} nouveaux contacts notés</li><li>${st.nNew} nouvelles personnes ajoutées</li></ul>`, [{ label: 'OK' }]);
+    App.route();
+  },
+  appliquerRetour(r) {
     let nMaj = 0, nNew = 0, nContacts = 0;
     r.personnes.forEach(np => {
       let p = P.get(np.id);
@@ -262,8 +273,7 @@ const Votants = {
       if (ch.length) P.touch(p, ch); nMaj++;
     });
     save(); log('Retour militant intégré', `${r.militant.prenom} ${r.militant.nom} : ${nMaj} fiches, ${nNew} nouvelles, ${nContacts} contacts`);
-    UI.modal('Retour intégré', `<p>Retour de <b>${esc(r.militant.prenom + ' ' + r.militant.nom)}</b> du ${fmtDT(r.date)} :</p><ul><li>${nMaj} fiches mises à jour</li><li>${nContacts} nouveaux contacts notés</li><li>${nNew} nouvelles personnes ajoutées</li></ul>`, [{ label: 'OK' }]);
-    App.route();
+    return { nMaj, nNew, nContacts };
   },
 
   /* ---------- Listes de votants (émargement quotidien) ---------- */

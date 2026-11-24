@@ -50,7 +50,7 @@ const Secu = {
       disciplines: D.disciplines, bareme: D.bareme || [], etablissements: D.etablissements.filter(e => e.manuel),
       reunions: perms.has('reu.voir') ? D.reunions : [], frais: D.frais.filter(f => f.userId === u.id || perms.has('frais.valider')),
       treso: perms.has('tres.voir') ? D.treso : null,
-      meta: { syndicat: D.meta.syndicat, elections: D.meta.elections, frais: D.meta.frais, exerciceDebutMois: D.meta.exerciceDebutMois, lockMinutes: D.meta.lockMinutes || 15, mailNational: D.meta.mailNational, mailsAcademies: D.meta.mailsAcademies, equipeLien: (D.meta.equipe || {}).lien || '' }
+      meta: { syndicat: D.meta.syndicat, elections: D.meta.elections, frais: D.meta.frais, exerciceDebutMois: D.meta.exerciceDebutMois, lockMinutes: D.meta.lockMinutes || 15, mailNational: D.meta.mailNational, mailsAcademies: D.meta.mailsAcademies, equipeLien: (D.meta.equipe || {}).lien || '', equipeDepot: (D.meta.equipe || {}).depot || '' }
     };
   },
   async inviter(uidUser) {
@@ -120,7 +120,7 @@ const Secu = {
       if (intention) { p.vote.intention = intention[0]; p.vote.intMaj = intention[1]; } P.fix(p);
     });
     // fiches sorties du périmètre : retirées de cet appareil
-    if (inv.type === 'maj-equipe') D.personnes = D.personnes.filter(p => ids.has(p.id) || p.ajoutLocal);
+    if (inv.type === 'maj-equipe') { const dp = (D.meta.paquet && D.meta.paquet.date) || ''; D.personnes = D.personnes.filter(p => ids.has(p.id) || (p.created || '') > dp); }
     D.roles = inv.roles; D.modeles = inv.modeles; D.publications = inv.publications; D.disciplines = inv.disciplines; D.bareme = inv.bareme;
     inv.etablissements.forEach(e => { if (!D.etablissements.some(x => x.uai === e.uai)) D.etablissements.push(e); });
     inv.reunions.forEach(r => { const i = D.reunions.findIndex(x => x.id === r.id); if (i >= 0) D.reunions[i] = r; else D.reunions.push(r); });

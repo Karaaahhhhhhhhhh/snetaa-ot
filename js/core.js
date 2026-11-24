@@ -549,6 +549,7 @@ App.routes[''] = function () {
   let h = `<div class="pagehead"><div><h1>Bonjour ${esc(ME.prenom)}</h1><div class="mut">${new Date().toLocaleDateString('fr-FR', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}</div></div></div>`;
   if (can('adm.sauvegarde') && (backupAge === null || backupAge > 7) && D.personnes.length)
     h += `<div class="alert w"><b>Sauvegarde :</b> ${backupAge === null ? 'aucune sauvegarde faite' : 'dernière sauvegarde il y a ' + backupAge + ' jours'}. Les données sont stockées dans ce navigateur : sauvegarde régulièrement. <a href="#/sauvegarde">Sauvegarder maintenant</a></div>`;
+  if (typeof Equipe !== 'undefined') h += Equipe.carteMembre();
   if (!ME.pid && D.personnes.length) h += `<div class="alert w"><b>Ton compte n'est pas relié à ta fiche adhérent.</b> <a href="#" onclick="Compte.ouvrir();return false">Le relier et choisir ton courriel de connexion</a></div>`;
   h += `<div class="alert"><b>Élections professionnelles :</b> ${elec}</div>`;
   const uaiInc = Array.from(new Set(D.personnes.flatMap(P.uais))).filter(u => /^\d{7}[A-Z]$/.test(u) && !D.etablissements.some(e => e.uai === u)).length;
