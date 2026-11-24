@@ -1,0 +1,88 @@
+/* =========================================================
+   Droits d'accès : accordés selon la fonction (S3, S2, S1,
+   trésorier) tirée des mandats, ajustables sur la fiche
+   ========================================================= */
+'use strict';
+const Droits = {
+  /* mandat → rôle de l'application */
+  ROLE_MANDAT: { S3: 's3', S3A: 's3', S2: 's2', S2A: 's2', S1: 's1', S1A: 's1', TRES: 'tresorier', TRESA: 'tresorier' },
+  personne(u) { return u && u.pid ? P.get(u.pid) : null; },
+  rolesMandats(u) {
+    const p = Droits.personne(u); if (!p) return [];
+    return Array.from(new Set(Mandats.de(p).map(m => Droits.ROLE_MANDAT[m.type]).filter(Boolean)));
+  },
+  roles(u) { return Array.from(new Set([...(u.role && u.role !== 'aucun' ? [u.role] : []), ...Droits.rolesMandats(u)])); },
+  perms(u) {
+    if (!u) return new Set();
+    const s = new Set();
+    Droits.roles(u).forEach(r => ((D.roles[r] || {}).perms || []).forEach(x => s.add(x)));
+    (u.permsPlus || []).forEach(x => s.add(x));
+    if (!Droits.roles(u).includes('admin')) (u.permsMoins || []).forEach(x => s.delete(x));
+    return s;
+  },
+  /* périmètre : départements (S2) et établissements (S1) issus des mandats + réglage manuel */
+  perimetre(u) {
+    const per = { deps: [...((u.perimetre || {}).deps || [])], etabs: [...((u.perimetre || {}).etabs || [])] };
+    const p = Droits.personne(u);
+    if (p) Mandats.de(p).forEach(m => { if (/^S2/.test(m.type) && m.dep) per.deps.push(m.dep); if (/^S1/.test(m.type) && m.uai) per.etabs.push(m.uai); });
+    per.deps = Array.from(new Set(per.deps)); per.etabs = Array.from(new Set(per.etabs));
+    return per;
+  },
+  libelle(u) {
+    const r = Droits.roles(u);
+    return r.map(k => (D.roles[k] || { label: k }).label).join(' + ') || 'aucune fonction';
+  },
+  rafraichir() { if (ME) { ME._perms = Droits.perms(ME); ME._per = Droits.perimetre(ME); } },
+  userDe(p) { return D.users.find(u => u.pid === p.id); },
+
+  /* ---------- Onglet « Accès » de la fiche ---------- */
+  tabFiche(p) {
+    const u = Droits.userDe(p);
+    const fonctions = Mandats.de(p).filter(m => Droits.ROLE_MANDAT[m.type]);
+    let h = `<div class="card"><h3 style="margin-top:0">Accès à l'application</h3>
+      <p class="small mut">Les droits découlent des fonctions en cours (onglet Mandats) : S3 → secrétariat académique, S2 → secrétaire départemental (son département), S1 → délégué d'établissement (son établissement), trésorier → trésorerie. Tu peux ensuite ajouter ou retirer des droits ci-dessous.</p>
+      <div class="kv"><div>Fonctions donnant des droits</div><div>${fonctions.map(m => `<span class="tag v">${esc(Mandats.libelle(m))}</span>`).join(' ') || '<span class="mut">aucune (désigne la personne dans l\'onglet Mandats)</span>'}</div></div>`;
+    if (!u) {
+      const libres = D.users.filter(x => !x.pid);
+      h += `<p style="margin-top:1rem"><button class="btn" onclick="Droits.creer('${p.id}')">+ Ouvrir un accès à l'application</button>
+        ${libres.length ? ` ou relier un compte existant : <select id="dr_lien" style="width:auto">${UI.opts(libres.map(x => [x.id, x.prenom + ' ' + x.nom]), '', '—')}</select> <button class="btn sm sec" onclick="Droits.relier('${p.id}')">Relier</button>` : ''}</p></div>`;
+      return h;
+    }
+    const roles = Droits.roles(u), base = new Set(); roles.forEach(r => ((D.roles[r] || {}).perms || []).forEach(x => base.add(x)));
+    const eff = Droits.perms(u), per = Droits.perimetre(u), admin = roles.includes('admin');
+    h += `<div class="kv" style="margin-top:.6rem"><div>Compte</div><div><b>${esc(u.prenom + ' ' + u.nom)}</b> ${u.actif === false ? '<span class="tag ko">désactivé</span>' : '<span class="tag ok">actif</span>'}</div>
+      <div>Droits accordés par</div><div>${esc(Droits.libelle(u))}</div>
+      <div>Périmètre</div><div>${eff.has('adh.voir_tout') ? 'tout le fichier' : esc([...per.deps.map(d => 'département ' + d + ' ' + (REF.departements[d] || '')), ...per.etabs.map(x => (D.etablissements.find(e => e.uai === x) || { nom: x }).nom)].join(' · ') || 'ses contacts attribués')}</div>
+      <div>Rôle complémentaire</div><div><select style="width:auto" onchange="Droits.setRole('${u.id}',this.value)" ${admin && u.id === ME.id ? 'disabled' : ''}>${UI.opts([['aucun', 'Aucun (droits issus des mandats)'], ...Object.entries(D.roles).filter(([k]) => !['s3', 's2', 's1', 'tresorier'].includes(k)).map(([k, r]) => [k, r.label])], u.role || 'aucun')}</select></div></div>
+      <h3>Droits détaillés</h3>${admin ? '<p class="small mut">Administrateur principal : tous les droits.</p>' : ''}
+      <div class="tablewrap" style="max-height:380px"><table><tbody>${PERMS.map(([k, l, g], i) => `${i === 0 || PERMS[i - 1][2] !== g ? `<tr><th colspan="2">${esc(g)}</th></tr>` : ''}<tr><td style="width:2rem"><input type="checkbox" ${eff.has(k) ? 'checked' : ''} ${admin ? 'disabled' : ''} onchange="Droits.basculer('${u.id}','${k}',this.checked,'${p.id}')"></td><td class="small">${esc(l)} ${base.has(k) ? '<span class="mut">(fonction)</span>' : (u.permsPlus || []).includes(k) ? '<span class="tag ok">ajouté</span>' : ''}${base.has(k) && (u.permsMoins || []).includes(k) ? ' <span class="tag ko">retiré</span>' : ''}</td></tr>`).join('')}</tbody></table></div>
+      <p style="margin-top:.8rem"><button class="btn sec sm" onclick="Droits.pin('${u.id}')">Nouveau code PIN</button> ${u.id !== ME.id ? `<button class="btn sec sm" onclick="Droits.actif('${u.id}',${u.actif === false})">${u.actif === false ? 'Réactiver le compte' : 'Désactiver le compte'}</button> <button class="btn sec sm" onclick="Droits.delier('${u.id}')">Délier de la fiche</button>` : ''}</p></div>`;
+    return h;
+  },
+  async creer(pid) {
+    const p = P.get(pid);
+    const pin = await UI.prompt('Accès pour ' + P.full(p), 'Code PIN provisoire (4 à 8 chiffres), à transmettre à la personne :', String(Math.floor(1000 + Math.random() * 9000)), 'text');
+    if (pin == null) return; if (!/^\d{4,8}$/.test(pin)) return UI.toast('PIN : 4 à 8 chiffres', 'r');
+    const salt = uid();
+    D.users.push({ id: uid(), pid, prenom: p.prenom, nom: p.nom, email: p.email, tel: p.telPortable, role: 'aucun', salt, pin: await Auth.hashPin(pin, salt), actif: true, perimetre: { etabs: [], deps: [] }, permsPlus: [], permsMoins: [], created: nowISO() });
+    save(); log('Accès créé', P.full(p) + ' (' + Droits.libelle(D.users[D.users.length - 1]) + ')'); UI.renderNav(); App.route();
+  },
+  relier(pid) { const id = $('#dr_lien').value; const u = D.users.find(x => x.id === id); if (!u) return; u.pid = pid; save(); log('Compte relié à une fiche', u.prenom + ' ' + u.nom); Droits.rafraichir(); UI.renderNav(); App.route(); },
+  async delier(id) { const u = D.users.find(x => x.id === id); if (!await UI.confirm('Délier le compte de cette fiche ? Il perd les droits liés aux mandats.', 'Délier')) return; u.pid = null; save(); App.route(); },
+  setRole(id, r) { const u = D.users.find(x => x.id === id); u.role = r; save(); log('Rôle modifié', u.prenom + ' ' + u.nom + ' → ' + r); Droits.rafraichir(); UI.renderNav(); App.route(); },
+  basculer(id, k, on) {
+    const u = D.users.find(x => x.id === id); u.permsPlus = u.permsPlus || []; u.permsMoins = u.permsMoins || [];
+    const base = new Set(); Droits.roles(u).forEach(r => ((D.roles[r] || {}).perms || []).forEach(x => base.add(x)));
+    u.permsPlus = u.permsPlus.filter(x => x !== k); u.permsMoins = u.permsMoins.filter(x => x !== k);
+    if (on && !base.has(k)) u.permsPlus.push(k);
+    if (!on && base.has(k)) u.permsMoins.push(k);
+    save(); log('Droit ' + (on ? 'accordé' : 'retiré'), u.prenom + ' ' + u.nom + ' : ' + k); Droits.rafraichir(); App.route();
+  },
+  async pin(id) {
+    const u = D.users.find(x => x.id === id);
+    const pin = await UI.prompt('Nouveau code PIN', 'Code PIN (4 à 8 chiffres) :', '', 'text'); if (pin == null) return;
+    if (!/^\d{4,8}$/.test(pin)) return UI.toast('PIN : 4 à 8 chiffres', 'r');
+    u.salt = uid(); u.pin = await Auth.hashPin(pin, u.salt); save(); log('PIN modifié', u.prenom + ' ' + u.nom); UI.toast('PIN modifié', 'g');
+  },
+  actif(id, on) { const u = D.users.find(x => x.id === id); u.actif = on; save(); log(on ? 'Compte réactivé' : 'Compte désactivé', u.prenom + ' ' + u.nom); App.route(); }
+};

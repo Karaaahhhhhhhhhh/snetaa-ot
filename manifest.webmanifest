@@ -1,0 +1,16 @@
+{
+  "name": "SNETAA-FO Orléans-Tours — Gestion syndicale",
+  "short_name": "SNETAA-FO OT",
+  "description": "Fichier adhérents, cahier de votants, réunions, frais et trésorerie de la section SNETAA-FO Orléans-Tours",
+  "lang": "fr",
+  "start_url": "./index.html",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#ffffff",
+  "theme_color": "#1b2a4a",
+  "icons": [
+    { "src": "img/icon-192.png", "sizes": "192x192", "type": "image/png" },
+    { "src": "img/icon-512.png", "sizes": "512x512", "type": "image/png" },
+    { "src": "img/icon-maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ]
+}

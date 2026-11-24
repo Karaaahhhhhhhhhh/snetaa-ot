@@ -1,0 +1,36 @@
+SNETAA-FO ORLÉANS-TOURS — APPLICATION DE GESTION SYNDICALE
+============================================================
+
+DÉMARRER (tout de suite, en local)
+1. Décompresser le dossier « snetaa-app » à un endroit fixe (ex. Documents\SNETAA-app).
+2. Double-cliquer sur index.html (de préférence avec Chrome ou Edge).
+3. Créer le compte administrateur (code PIN), puis suivre « Aide & démarrage ».
+
+IMPORTANT
+- Les données sont enregistrées dans le navigateur de cet ordinateur, rattachées à
+  l'emplacement du dossier : ne pas déplacer le dossier, toujours utiliser le même navigateur.
+- Faire une sauvegarde chaque semaine (menu Sauvegarde, avec mot de passe).
+- Le dossier ne contient aucune donnée d'adhérent : il peut être copié ou mis en ligne.
+
+RACCOURCI AVEC ICÔNE SUR L'ORDINATEUR (Windows)
+Double-cliquer sur « Creer-raccourci-Windows.cmd » : raccourci sur le bureau et dans le
+menu Démarrer, application ouverte dans sa propre fenêtre.
+Changer l'icône : remplacer img\icone-source.png par l'image choisie (carrée, 1024 px),
+double-cliquer sur « Changer-icone-Windows.cmd », puis relancer « Creer-raccourci-Windows.cmd ».
+Si Windows affiche un avertissement (SmartScreen), cliquer sur « Informations
+complémentaires » puis « Exécuter quand même ».
+
+INSTALLER SUR TÉLÉPHONE
+Déposer le dossier sur un hébergement « https » (GitHub Pages par exemple), ouvrir
+l'adresse, puis « Installer l'application » (Chrome/Edge/Android) ou « Sur l'écran
+d'accueil » (iPhone). Les données restent sur chaque appareil, jamais sur le serveur.
+
+TRAVAIL À PLUSIEURS
+Chaque militant a son compte et son rôle. Pour qu'un militant travaille sur son propre
+téléphone : menu « Répartition militants » → bouton « Paquet » (fichier chiffré ne
+contenant que ses contacts) ; le militant renvoie un « retour » qu'on intègre ensuite.
+
+CONTENU
+index.html, style.css, js/ (programme), lib/ (Excel, cartographie), img/ (logos, icônes)
+Données publiques incluses : lycées de l'académie (ONISEP), formations post-bac
+(Parcoursup 2026), collèges, SEGPA et EREA (ONISEP), rectorat (sites Saint-Étienne et Coligny) et DSDEN.
