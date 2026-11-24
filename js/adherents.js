@@ -17,7 +17,38 @@ const Adh = {
     ['adresse', 'Adresse'], ['cp', 'Code postal'], ['ville', 'Ville'], ['statut', 'Statut / corps'], ['discipline', 'Code discipline'], ['classe', 'Classe / grade'], ['echelon', 'Échelon'], ['indice', 'Indice majoré'], ['datePromo', 'Date d\'accès à l\'échelon'],
     ['etabUAI', 'UAI établissement'], ['etabNom', 'Établissement'], ['academie', 'Académie'], ['datePremiereAdhesion', 'Date de première adhésion'], ['calendrier', 'Calendrier d\'adhésion']
   ],
-  f: { q: '', cat: '', cotis: '', statut: '', disc: '', dep: '', etab: '', mil: '', flag: '', sort: 'nom', lim: 300 },
+  f: { q: '', cat: '', cotis: '', statut: '', disc: '', dep: '', etab: '', mil: '', flag: '', fonc: '', sort: 'nom', lim: 300 },
+  /* ---------- Fonctions syndicales et accès ---------- */
+  RANG: { S3: 1, S3A: 2, TRES: 3, TRESA: 4, S2: 5, S2A: 6, S1: 7, S1A: 8, BUR: 9, REP: 10 },
+  acces(p) {
+    const u = typeof Droits !== 'undefined' && Droits.userDe(p); if (!u || u.actif === false) return '';
+    if (u.pin || (u.invitation && u.invitation.statut === 'activée')) return 'actif';
+    if (u.invitation && u.invitation.statut === 'envoyée') return 'invite';
+    return 'designe';
+  },
+  rangFonction(p) {
+    const r = Math.min(99, ...Mandats.de(p).map(m => Adh.RANG[m.type] || 50));
+    if (r < 99) return r; const a = Adh.acces(p); return a === 'designe' ? 60 : a ? 70 : 99;
+  },
+  estMilitant(p) { return Mandats.de(p).length > 0 || !!Adh.acces(p); },
+  fonctionOk(p, f) {
+    const t = Mandats.de(p).map(m => m.type), a = Adh.acces(p);
+    switch (f) {
+      case '_mil': return Adh.estMilitant(p);
+      case 'S3': return t.some(x => /^S3/.test(x)); case 'S2': return t.some(x => /^S2/.test(x)); case 'S1': return t.some(x => /^S1/.test(x));
+      case 'TRES': return t.some(x => /^TRES/.test(x)); case 'BUR': return t.some(x => x === 'BUR' || x === 'REP');
+      case '_designe': return !t.length && !!a; case '_acces': return a === 'actif'; case '_invite': return a === 'invite';
+      case '_aucun': return !Adh.estMilitant(p); default: return true;
+    }
+  },
+  badgeAcces(p) { const a = Adh.acces(p); return a === 'actif' ? '<span class="tag ok" title="Utilise l\'application">🔑 accès</span>' : a === 'invite' ? '<span class="tag w" title="Invitation envoyée, pas encore activée">✉ invité</span>' : a === 'designe' ? '<span class="tag" title="Militant désigné, sans accès à l\'application">militant</span>' : ''; },
+  FONCS: [['_mil', 'Tous les militants'], ['S3', 'S3 – secrétariat académique'], ['S2', 'S2 – secrétaires départementaux'], ['S1', 'S1 – délégués d\'établissement'], ['TRES', 'Trésorerie'], ['BUR', 'Bureau / représentants'], ['_designe', 'Militants sans mandat'], ['_acces', 'Ayant accès à l\'application'], ['_invite', 'Invitation en attente'], ['_aucun', 'Sans fonction']],
+  chipsFonction() {
+    const vis = P.visibles(), f = Adh.f.fonc;
+    const n = k => vis.filter(p => Adh.fonctionOk(p, k)).length;
+    return [['_mil', '★ Militants'], ['S3', 'S3'], ['S2', 'S2'], ['S1', 'S1'], ['TRES', 'Trésorerie'], ['_acces', '🔑 Accès appli'], ['_invite', '✉ Invités']].map(([k, l]) => { const c = n(k); return c || f === k ? `<button class="btn sm ${f === k ? '' : 'sec'}" onclick="Adh.setF('fonc', Adh.f.fonc === '${k}' ? '' : '${k}'); Adh.renderChips()">${l} <b>${c}</b></button>` : ''; }).join(' ');
+  },
+  renderChips() { const el = $('#adhchips'); if (el) el.innerHTML = Adh.chipsFonction(); const sel = $('#adhfonc'); if (sel) sel.value = Adh.f.fonc || ''; },
   val(p, f) {
     if (f === 'etabUAI') { const a = p.affectations.find(x => x.principal) || p.affectations[0]; return a ? a.uai || '' : ''; }
     if (f === 'etabNom') { const a = p.affectations.find(x => x.principal) || p.affectations[0]; return a ? a.nom || '' : ''; }
@@ -60,6 +91,7 @@ const Adh = {
       if (f.dep && P.dep(p) !== f.dep) return false;
       if (f.etab && !P.uais(p).includes(f.etab)) return false;
       if (f.mil === '_none' ? p.militant : (f.mil && p.militant !== f.mil)) return false;
+      if (f.fonc && !Adh.fonctionOk(p, f.fonc)) return false;
       if (f.flag === 'emailInvalide' && !p.emailInvalide) return false;
       if (f.flag === 'sansEmail' && p.email) return false;
       if (f.flag === 'sansTel' && (p.telPortable || p.telFixe)) return false;
@@ -70,7 +102,7 @@ const Adh = {
       return true;
     });
     const s = f.sort;
-    const key = { nom: p => norm(p.nom + ' ' + p.prenom), etab: p => norm(P.etab(p)), statut: p => p.statut || '', cotis: p => P.cotis(p), dep: p => P.dep(p), maj: p => p.maj || '' }[s.replace('-', '')] || (p => '');
+    const key = { nom: p => norm(p.nom + ' ' + p.prenom), etab: p => norm(P.etab(p)), statut: p => p.statut || '', cotis: p => P.cotis(p), dep: p => P.dep(p), maj: p => p.maj || '', fonc: p => String(Adh.rangFonction(p)).padStart(2, '0') + norm(p.nom + ' ' + p.prenom) }[s.replace('-', '')] || (p => '');
     l.sort((a, b) => key(a) < key(b) ? -1 : key(a) > key(b) ? 1 : 0); if (s.startsWith('-')) l.reverse();
     return l;
   },
@@ -91,7 +123,10 @@ const Adh = {
         <select onchange="Adh.setF('etab',this.value)" style="max-width:220px">${UI.opts(etabs, f.etab, 'Tous établissements')}</select>
         <select onchange="Adh.setF('mil',this.value)">${UI.militantsOpts(f.mil, 'Tous militants')}<option value="_none" ${f.mil === '_none' ? 'selected' : ''}>Sans militant</option></select>
         <select onchange="Adh.setF('flag',this.value)">${UI.opts([['emailInvalide', 'Mail en erreur'], ['sansEmail', 'Sans mail'], ['sansTel', 'Sans téléphone'], ['acad', 'Changement d\'académie'], ['civil', 'Calendrier civil (ex-FO)'], ['diff', 'Modifs à signaler']], f.flag, 'Aucun signalement')}</select>
-        <button class="btn ghost sm" onclick="Adh.f={q:'',cat:'',cotis:'',statut:'',disc:'',dep:'',etab:'',mil:'',flag:'',sort:'nom',lim:300};Adh.page()">Réinitialiser</button>
+        <select id="adhfonc" onchange="Adh.setF('fonc',this.value);Adh.renderChips()">${UI.opts(Adh.FONCS, f.fonc, 'Fonction : toutes')}</select>
+        <button class="btn ghost sm" onclick="Adh.f={q:'',cat:'',cotis:'',statut:'',disc:'',dep:'',etab:'',mil:'',flag:'',fonc:'',sort:'nom',lim:300};Adh.page()">Réinitialiser</button>
+      </div>
+      <div class="toolbar" id="adhchips" style="gap:.4rem;flex-wrap:wrap">${Adh.chipsFonction()}
       </div>
       <div class="toolbar"><span id="selinfo" class="small mut"></span>
         ${can('com.envoyer') ? `<button class="btn sm sec" onclick="Comm.envoyerSelection(Adh.selIds())">✉ Mail / SMS type</button>` : ''}
@@ -109,10 +144,11 @@ const Adh = {
     const l = Adh.filtered(), lim = Adh.f.lim;
     $('#adhcount').textContent = plural(l.length, 'fiche') + ' affichée' + (l.length > 1 ? 's' : '');
     const th = (k, t) => `<th class="sort" onclick="Adh.sortBy('${k}')">${t}${Adh.f.sort === k ? ' ▲' : Adh.f.sort === '-' + k ? ' ▼' : ''}</th>`;
-    $('#adhlist').innerHTML = `<div class="tablewrap"><table><thead><tr><th><input type="checkbox" onclick="UI.selAll(${JSON.stringify(l.slice(0, lim).map(p => p.id)).replace(/"/g, '&quot;')},this.checked)"></th>${th('nom', 'Nom')}${th('statut', 'Statut / discipline')}${th('etab', 'Établissement')}${th('dep', 'Dép.')}${th('cotis', 'Cotisation')}<th class="hide-m">Contact</th><th class="hide-m">Militant</th></tr></thead><tbody>
+    $('#adhlist').innerHTML = `<div class="tablewrap"><table><thead><tr><th><input type="checkbox" onclick="UI.selAll(${JSON.stringify(l.slice(0, lim).map(p => p.id)).replace(/"/g, '&quot;')},this.checked)"></th>${th('nom', 'Nom')}${th('fonc', 'Fonction')}${th('statut', 'Statut / discipline')}${th('etab', 'Établissement')}${th('dep', 'Dép.')}${th('cotis', 'Cotisation')}<th class="hide-m">Contact</th><th class="hide-m">Militant</th></tr></thead><tbody>
       ${l.slice(0, lim).map(p => `<tr class="click" onclick="if(event.target.type!=='checkbox')App.go('fiche/${p.id}')">
         <td><input type="checkbox" class="rowsel" ${UI.sel.has(p.id) ? 'checked' : ''} onchange="UI.selToggle('${p.id}',this.checked)"></td>
-        <td><b>${esc(P.full(p))}</b> ${Mandats.tags(p)}${p.calendrier === 'civil' ? ' <span class="tag v" title="Calendrier civil (1er janvier - 31 décembre)">civil</span>' : ''}${p.changementAcademie ? ' <span class="tag w">→ ' + esc(p.changementAcademie.nouvelle) + '</span>' : ''}</td>
+        <td><b>${esc(P.full(p))}</b>${p.calendrier === 'civil' ? ' <span class="tag v" title="Calendrier civil (1er janvier - 31 décembre)">civil</span>' : ''}${p.changementAcademie ? ' <span class="tag w">→ ' + esc(p.changementAcademie.nouvelle) + '</span>' : ''}</td>
+        <td>${Mandats.tags(p)} ${Adh.badgeAcces(p)}</td>
         <td>${esc(STATUT(p.statut)[1] ? STATUT(p.statut)[0] : '')}${p.discipline ? ' · <span title="' + esc(discLabel(p.discipline)) + '">' + esc(p.discipline) + '</span>' : ''}</td>
         <td>${esc(P.etab(p)) || (p.statut === 'RETR' ? '<span class="mut">retraité·e</span>' : '')}</td><td>${esc(P.dep(p))}</td><td>${P.cotisTag(p)}${p.situationNat ? ' <span class="tag ko">' + esc(p.situationNat.toLowerCase()) + '</span>' : ''}</td>
         <td class="hide-m small">${p.email ? (p.emailInvalide ? '<span class="tag ko">mail ✗</span>' : '✉') : ''} ${p.telPortable ? '☎' : ''}</td>
@@ -132,7 +168,7 @@ const Adh = {
       Adresse: p.adresse || '', CP: p.cp || '', Ville: p.ville || '', Statut: STATUT(p.statut)[1], 'Code discipline': p.discipline || '', Discipline: discLabel(p.discipline),
       'UAI': P.uais(p).join(', '), Établissement: P.etabs(p), Département: P.dep(p), Académie: p.academie || '',
       Calendrier: p.calendrier === 'civil' ? '1er janv. - 31 déc.' : '1er sept. - 31 août', 'Première adhésion': fmtDate(p.datePremiereAdhesion), 'Classe': Carriere.classe(p.classe), 'Échelon': p.echelon || '', 'Indice majoré': p.indice || '', 'Date échelon': fmtDate(p.datePromo), 'Cotisation attendue': Carriere.montant(p) || '', 'Dernière cotisation': P.derniere(p),
-      'À jour': { ajour: 'oui', retard: 'non (à relancer)', ancien: 'non (ancien)', inconnu: '?', nonadh: '' }[P.cotis(p)], Militant: userName(p.militant), 'Intention de vote': intention(p.vote.intention)[1], 'A voté': p.vote.aVote ? 'oui' : ''
+      'À jour': { ajour: 'oui', retard: 'non (à relancer)', ancien: 'non (ancien)', inconnu: '?', nonadh: '' }[P.cotis(p)], Militant: userName(p.militant), 'Fonctions syndicales': Mandats.de(p).map(Mandats.libelle).join(', '), 'Accès application': { actif: 'oui', invite: 'invitation envoyée', designe: 'militant sans accès' }[Adh.acces(p)] || '', 'Intention de vote': intention(p.vote.intention)[1], 'A voté': p.vote.aVote ? 'oui' : ''
     };
   },
   bulkMilitant() {
