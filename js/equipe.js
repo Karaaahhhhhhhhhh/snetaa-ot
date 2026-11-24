@@ -71,10 +71,10 @@ const Equipe = {
       <div class="kv"><div>Membres concernés</div><div>${mb.length ? mb.map(u => esc(u.prenom + ' ' + u.nom)).join(', ') : '<span class="mut">aucun membre invité pour l\'instant</span>'}</div>
         <div>Mot de passe d'équipe</div><div>${e.mdp ? `créé le ${fmtDT(e.cree)} <button class="btn sm sec" onclick="Equipe.afficher()">👁 Afficher / partager</button> <button class="btn sm ghost" onclick="Equipe.nouveauMdp()">↻ Nouveau mot de passe</button>` : `<button class="btn sm" onclick="Equipe.nouveauMdp()">Générer le mot de passe d'équipe</button>`}</div>
         <div>Dernière publication</div><div>${e.publie ? fmtDT(e.publie) + (e.mdpPublie && e.mdpPublie !== e.cree ? ' <span class="tag w">avec l\'ancien mot de passe : republie</span>' : '') : 'jamais'}</div>
-        <div>Lien de mise à jour</div><div class="small">${e.lien ? `<a href="${esc(e.lien)}" target="_blank" rel="noopener">${esc(e.lien.slice(0, 60))}…</a> <button class="btn sm sec" onclick="copyText(Equipe.etat().lien)">Copier pour le groupe WhatsApp</button>` : '—'}</div>
+        <div>Lien de mise à jour</div><div class="small">${e.lien ? `<a href="${esc(e.lien)}" target="_blank" rel="noopener">${esc(e.lien.slice(0, 60))}…</a> <button class="btn sm sec" onclick="copyText(Equipe.etat().lien)">📋 Copier le lien</button>` : '—'}</div>
         <div>Dépôt des retours</div><div class="small">${e.depot ? `<a href="${esc(e.depot)}" target="_blank" rel="noopener">lien de dépôt actif</a>` : '—'}</div></div>
       <p>${dbx.connecte ? `<button class="btn" onclick="Equipe.publier()" ${mb.length ? '' : 'disabled'}>☁ Publier la mise à jour de l'équipe</button> <button class="btn sec" onclick="Equipe.recupererRetours()">⇩ Récupérer les retours déposés</button>` : '<span class="small mut">Connecte d\'abord Dropbox (ci-dessus).</span>'}</p>
-      <p class="small mut">Les membres invités <b>avant le 24/11/2026</b> doivent recevoir une nouvelle invitation pour disposer de leur clé personnelle.</p></div>`;
+      ${e.lien ? `<p class="small mut">À poster sur le groupe WhatsApp : le lien (bouton « Copier ») et le mot de passe d'équipe (« Afficher / partager »).</p>` : ''}</div>`;
   },
   async verifierCode(titre) {
     const pin = await UI.prompt(titre || 'Confirmation', 'Ton code personnel :', '', 'password'); if (pin == null) return false;
