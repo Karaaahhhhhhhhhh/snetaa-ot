@@ -130,7 +130,7 @@ const Import = {
       <ol class="small"><li>Choisir le fichier reçu.</li><li>Vérifier l'association des colonnes (mémorisée d'une fois sur l'autre).</li><li>L'application nettoie les données (majuscules, mails, téléphones, dates, doublons…) et les compare au fichier de l'application.</li>
       <li>Tu choisis ce que tu acceptes. <b>Tes corrections faites dans l'application ne sont jamais écrasées</b> : elles alimentent le récapitulatif pour le national.</li></ol>
       <p class="small"><b>Plusieurs fichiers d'un coup :</b> sélectionne-les ensemble (ex. « Fichier_Adresses » + « Fichier_Adresses_FO ») pour qu'ils soient traités comme un seul fichier. Les identifiants et mots de passe éventuellement présents (colonnes login / mdp) ne sont jamais importés.</p>
-      <button class="btn" onclick="Import.lancer()">⇪ Importer le(s) fichier(s) adhérents</button></div>
+      <button class="btn" onclick="Import.lancer()">⇪ Importer le(s) fichier(s) adhérents</button> <button class="btn sec" onclick="Annuaire.ouvrir()">⇪ Fiches de l'annuaire académique (texte)</button></div>
       <h2>Historique des imports</h2><div class="tablewrap"><table><thead><tr><th>Date</th><th>Fichier</th><th class="num">Lignes</th><th class="num">Nouveaux</th><th class="num">Mis à jour</th><th class="num">Corrections locales conservées</th><th class="num">Absents</th><th>Par</th></tr></thead><tbody>
       ${h.map(i => `<tr><td>${fmtDT(i.date)}</td><td>${esc(i.fichier)}</td><td class="num">${i.lignes}</td><td class="num">${i.nouveaux}</td><td class="num">${i.maj}</td><td class="num">${i.conflits}</td><td class="num">${i.absents}</td><td>${esc(userName(i.par))}</td></tr>`).join('') || '<tr><td colspan="8" class="mut">Aucun import</td></tr>'}</tbody></table></div>`;
   },

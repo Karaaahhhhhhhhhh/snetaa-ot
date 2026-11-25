@@ -224,10 +224,10 @@ const Adh = {
     return `<div class="grid g2"><div class="card"><h3 style="margin-top:0">Coordonnées</h3><div class="kv">
       ${kv('Catégorie', esc(REF.categories[p.categorie]))}${kv('N° adhérent', esc(p.numAdherent))}${kv('Nom de naissance', esc(p.nomNaissance))}${kv('Date de naissance', fmtDate(p.dateNaissance))}
       ${kv('Courriel', p.email ? `<a href="mailto:${esc(p.email)}">${esc(p.email)}</a>${p.emailInvalide ? ` <span class="tag ko">en erreur depuis le ${fmtDate(p.emailInvalide.date)}</span>` : ''}` : '')}
-      ${kv('Courriel académique', esc(p.emailPro))}${kv('Portable', p.telPortable ? `<a href="tel:${esc(phoneIntl(p.telPortable))}">${esc(p.telPortable)}</a>` : '')}${kv('Fixe', esc(p.telFixe))}
+      ${kv('Courriel académique', esc(p.emailPro))}${kv('Autres courriels', esc((p.emailsAutres || []).join(', ')))}${kv('Autres noms / prénoms', esc([...(p.nomsAutres || []), ...(p.prenomsAutres || [])].join(', ')))}${kv('Portable', p.telPortable ? `<a href="tel:${esc(phoneIntl(p.telPortable))}">${esc(p.telPortable)}</a>` : '')}${kv('Fixe', esc(p.telFixe))}
       ${kv('Adresse', esc([p.adresse, [p.cp, p.ville].filter(Boolean).join(' ')].filter(Boolean).join(', ')))}</div></div>
       <div class="card"><h3 style="margin-top:0">Situation professionnelle</h3><div class="kv">
-      ${kv('Statut', esc(STATUT(p.statut)[1]))}${kv('Discipline', esc(p.discipline ? p.discipline + ' — ' + discLabel(p.discipline) : ''))}
+      ${kv('Statut', esc(STATUT(p.statut)[1]))}${kv('Discipline', esc(p.discipline ? p.discipline + ' — ' + discLabel(p.discipline) : ''))}${kv('Autres disciplines', esc((p.disciplinesAutres || []).map(c => c + ' — ' + discLabel(c)).join(' · ')))}${kv('Corps antérieurs', esc((p.statutsAnterieurs || []).map(s => STATUT(s)[1] || s).join(', ')))}
       ${kv('Carrière', esc(Carriere.resume(p)))}${kv('Cotisation attendue', Carriere.montant(p) ? fmtEUR(Carriere.montant(p)) : '')}${kv('Académie', esc(p.academie))}${kv('Département', esc(P.dep(p) ? P.dep(p) + ' ' + (REF.departements[P.dep(p)] || '') : ''))}
       ${kv('Militant référent', esc(userName(p.militant)))}</div>
       <h3>Affectation(s)</h3>${p.affectations.length ? p.affectations.map(a => `<div>${a.principal ? '★ ' : ''}<b>${esc(a.nom || '')}</b> <span class="mut">${esc(a.uai || '')} ${esc(a.ville || '')}${a.quotite ? ' — ' + esc(a.quotite) : ''}</span></div>`).join('') : '<span class="mut">Non renseignée</span>'}</div></div>
