@@ -20,6 +20,41 @@ const Annuaire = {
       return o.nom ? o : null;
     }).filter(Boolean);
   },
+  /* ---------- Choix des noms préparés à l'avance ----------
+     Bloc en fin de fichier texte :  === MES CHOIX POUR LES NOMS ===
+     puis une ligne par cas : nom dans le fichier ; nom dans l'annuaire ; choix
+     ou tableau Excel (onglet « Noms à arbitrer » : fichier | annuaire | choix) */
+  MARQUE: /^\s*=+\s*MES CHOIX POUR LES NOMS\s*=+\s*$/im,
+  separer(txt) {
+    const t = String(txt || ''), m = t.match(Annuaire.MARQUE);
+    if (!m) return { texte: t, choix: [] };
+    const fin = t.slice(m.index + m[0].length);
+    const choix = fin.split(/\r?\n/).map(l => l.split(/\s*[;|\t]\s*/)).filter(c => c.length >= 3 && c[0].trim()).map(c => Annuaire.ligneChoix(c[0], c[1], c[2])).filter(Boolean);
+    return { texte: t.slice(0, m.index), choix };
+  },
+  ligneChoix(f, a, c) {
+    const n = norm(c || ''); const v = /deux/.test(n) ? 'deux' : /annuaire/.test(n) ? 'annuaire' : /fichier/.test(n) ? 'fichier' : '';
+    return v && String(f || '').trim() ? { f: String(f).trim(), a: String(a || '').trim(), v } : null;
+  },
+  async choixExcel() {
+    const f = await pickFile('.xlsx,.xls,.ods,.csv'); if (!f) return;
+    Annuaire.choixDepuis(await readSheetFile(f), f.name);
+  },
+  choixDepuis(sh, fname) {
+    const nom = Object.keys(sh).find(n => /arbitr/i.test(n)) || Object.keys(sh).find(n => (sh[n][0] || []).some(h => /choix/i.test(h)));
+    if (!nom) return UI.toast('Aucun onglet « Noms à arbitrer » dans ce fichier', 'r');
+    const rows = sh[nom], h = (rows[0] || []).map(x => norm(String(x)));
+    const iF = Math.max(0, h.findIndex(x => /fichier/.test(x))), iA = h.findIndex(x => /annuaire/.test(x)), iC = h.findIndex(x => /choix/.test(x));
+    Annuaire._choix = rows.slice(1).map(r => Annuaire.ligneChoix(r[iF], r[iA < 0 ? 1 : iA], r[iC < 0 ? 2 : iC])).filter(Boolean);
+    const z = document.getElementById('an_ch'); if (z) z.innerHTML = `✔ ${plural(Annuaire._choix.length, 'choix chargé')} depuis « ${esc(fname)} »`;
+  },
+  choixPour(x, n) {
+    const c = Annuaire.cle, l = Annuaire._choix || [];
+    const ok = k => l.find(k);
+    const r = ok(z => c(z.a) === c(n.apres) && (c(z.f) === c(n.avant) || c(z.f).includes(c(n.avant)) || c(n.avant).includes(c(z.f))))
+      || ok(z => c(z.a) === c(n.apres) && c(z.f).includes(c(x.p.nom)));
+    return r ? r.v : '';
+  },
   /* ---------- Rapprochement avec les fiches ---------- */
   cle: s => norm(s).replace(/[^a-z]/g, ''),
   trouver(o) {
@@ -55,23 +90,29 @@ const Annuaire = {
     });
   },
   /* ---------- Interface ---------- */
-  async ouvrir() {
+  async ouvrir(pre) {
+    pre = typeof pre === 'string' ? pre : '';
     const txt = await UI.modal('Importer des fiches de l\'annuaire académique', `<p class="small">Colle ici les fiches copiées depuis l'annuaire du rectorat (« Consultation Gestion de la fiche de… »), ou choisis le fichier texte.</p>
-      <p><button class="btn sec" onclick="pickFile('.txt,.md,.text').then(f=>f&&readFile(f,'text')).then(t=>{if(t)document.getElementById('an_t').value=t})">Choisir un fichier…</button></p>
-      <div class="f"><textarea id="an_t" style="min-height:240px;font-family:monospace;font-size:.75rem"></textarea></div>
+      <p><button class="btn" onclick="pickFile('.txt,.md,.text').then(f=>f&&readFile(f,'text')).then(t=>{if(t)document.getElementById('an_t').value=t})">1. Choisir le fichier de l'annuaire…</button>
+      <button class="btn sec" onclick="Annuaire.choixExcel()">2. (facultatif) Charger mes choix de noms (Excel)…</button></p>
+      <p class="small mut" id="an_ch">${(Annuaire._choix || []).length ? `✔ ${plural(Annuaire._choix.length, 'choix chargé')}` : ''} Si le fichier texte contient déjà le bloc « MES CHOIX POUR LES NOMS », tes choix sont repris automatiquement : rien d'autre à faire.</p>
+      <div class="f"><textarea id="an_t" style="min-height:240px;font-family:monospace;font-size:.75rem">${esc(pre)}</textarea></div>
       <p class="small mut">Repris comme fiables : établissement (affectation actuelle), classe (normale, hors classe, exceptionnelle) et discipline de recrutement. Les courriels et disciplines différents sont <b>ajoutés</b> sans rien effacer. Les différences de nom ou de prénom te sont soumises une par une.</p>`,
       [{ label: 'Annuler', value: null }, { label: 'Analyser', onClick: m => m.querySelector('#an_t').value }], { wide: true });
-    if (!txt) return;
-    const l = Annuaire.lire(txt); if (!l.length) return UI.toast('Aucune fiche reconnue dans ce texte', 'r');
+    if (!txt) { Annuaire._choix = null; return; }
+    const sp = Annuaire.separer(txt); if (sp.choix.length) Annuaire._choix = sp.choix;
+    const l = Annuaire.lire(sp.texte); if (!l.length) return UI.toast('Aucune fiche reconnue dans ce texte', 'r');
     Annuaire._r = Annuaire.analyser(l); Annuaire.apercu();
   },
   apercu() {
     const r = Annuaire._r, ok = r.filter(x => x.p), mods = ok.filter(x => x.ch.length), noms = ok.filter(x => x.noms.length), inc = r.filter(x => !x.p);
+    let nPre = 0; noms.forEach(x => x.noms.forEach(n => { n.pre = Annuaire.choixPour(x, n); if (n.pre) nPre++; }));
     const vu = new Set(); const doublonsAnn = ok.filter(x => { if (vu.has(x.p.id)) return true; vu.add(x.p.id); return false; });
     UI.modal(`Annuaire : ${r.length} fiche(s) lue(s)`, `<div class="tiles"><div class="tile"><div class="n">${ok.length}</div><div class="l">retrouvées</div></div><div class="tile"><div class="n">${mods.length}</div><div class="l">à mettre à jour</div></div><div class="tile"><div class="n">${noms.length}</div><div class="l">noms à arbitrer</div></div><div class="tile"><div class="n">${inc.length}</div><div class="l">non trouvées</div></div></div>
       ${doublonsAnn.length ? `<div class="alert w small">${doublonsAnn.length} fiche(s) de l'annuaire correspondent à une même personne du fichier : vérifie-les.</div>` : ''}
+      ${nPre ? `<div class="alert g small">✔ ${plural(nPre, 'choix de nom repris', 'choix de noms repris')} de ton fichier (déjà cochés ci-dessous).</div>` : ''}
       ${noms.length ? `<h3>Noms et prénoms différents — à toi de choisir</h3><div class="tablewrap"><table><thead><tr><th>Fiche</th><th>Fichier</th><th>Annuaire</th><th>Choix</th></tr></thead><tbody>${noms.map(x => x.noms.map(n => `<tr><td class="small">${esc(P.full(x.p))}<div class="mut">${esc(x.par)}</div></td><td>${esc(n.avant)}</td><td>${esc(n.apres)}</td><td class="small nowrap">
-        <label><input type="radio" name="an_${x.i}_${n.k}" value="fichier" checked> garder le fichier</label><br><label><input type="radio" name="an_${x.i}_${n.k}" value="annuaire"> prendre l'annuaire</label><br><label><input type="radio" name="an_${x.i}_${n.k}" value="deux"> garder les deux</label></td></tr>`).join('')).join('')}</tbody></table></div>` : ''}
+        <label><input type="radio" name="an_${x.i}_${n.k}" value="fichier" ${!n.pre || n.pre === 'fichier' ? 'checked' : ''}> garder le fichier</label><br><label><input type="radio" name="an_${x.i}_${n.k}" value="annuaire" ${n.pre === 'annuaire' ? 'checked' : ''}> prendre l'annuaire</label><br><label><input type="radio" name="an_${x.i}_${n.k}" value="deux" ${n.pre === 'deux' ? 'checked' : ''}> garder les deux</label></td></tr>`).join('')).join('')}</tbody></table></div>` : ''}
       <h3>Mises à jour (${mods.length})</h3><p class="small"><a href="#" onclick="$$('.an_c').forEach(c=>c.checked=true);return false">tout cocher</a> · <a href="#" onclick="$$('.an_c').forEach(c=>c.checked=false);return false">tout décocher</a></p>
       <div class="tablewrap" style="max-height:45vh"><table><thead><tr><th></th><th>Fiche</th><th>Modification</th><th>Fichier</th><th>Annuaire</th></tr></thead><tbody>${mods.map(x => x.ch.map((c, j) => `<tr><td><input type="checkbox" class="an_c" data-i="${x.i}" data-k="${c.k}" checked></td><td class="small">${j ? '' : `<b>${esc(P.full(x.p))}</b>`}</td><td class="small">${esc(c.lib)}</td><td class="small mut">${esc(c.avant)}</td><td class="small">${esc(c.apres)}</td></tr>`).join('')).join('')}</tbody></table></div>
       ${inc.length ? `<h3>Non trouvées dans le fichier (${inc.length})</h3><p class="small mut">Coche celles à créer comme <b>contacts</b> (collègues de l'annuaire), sinon elles sont ignorées.</p><div class="tablewrap" style="max-height:30vh"><table><tbody>${inc.map(x => `<tr><td><input type="checkbox" class="an_n" data-i="${x.i}"></td><td><b>${esc((x.o.nom || '').toUpperCase())} ${esc(x.o.prenom)}</b></td><td class="small">${esc(x.o.etabNom || '')}</td><td class="small">${esc(x.o.grade || x.o.fonctions || '')}</td><td class="small">${esc(x.o.mail)}</td></tr>`).join('')}</tbody></table></div>` : ''}`,
@@ -109,6 +150,7 @@ const Annuaire = {
       D.personnes.push(p); nNew++;
     });
     touches.forEach(id => { const p = P.get(id); p.interventions = p.interventions || []; p.interventions.push({ id: uid(), date: todayISO(), type: 'Autre', canal: 'autre', objet: 'Mise à jour depuis l\'annuaire académique', detail: '', auteur: ME.id }); P.touch(p); nMod++; });
+    Annuaire._choix = null;
     save(); log('Import annuaire académique', `${nMod} fiche(s) mise(s) à jour, ${nNew} contact(s) créé(s)`);
     UI.toast(`${nMod} fiche(s) mise(s) à jour, ${nNew} contact(s) créé(s)`, 'g'); setTimeout(App.route, 50);
   }

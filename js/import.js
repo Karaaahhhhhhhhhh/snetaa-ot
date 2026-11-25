@@ -130,11 +130,21 @@ const Import = {
       <ol class="small"><li>Choisir le fichier reçu.</li><li>Vérifier l'association des colonnes (mémorisée d'une fois sur l'autre).</li><li>L'application nettoie les données (majuscules, mails, téléphones, dates, doublons…) et les compare au fichier de l'application.</li>
       <li>Tu choisis ce que tu acceptes. <b>Tes corrections faites dans l'application ne sont jamais écrasées</b> : elles alimentent le récapitulatif pour le national.</li></ol>
       <p class="small"><b>Plusieurs fichiers d'un coup :</b> sélectionne-les ensemble (ex. « Fichier_Adresses » + « Fichier_Adresses_FO ») pour qu'ils soient traités comme un seul fichier. Les identifiants et mots de passe éventuellement présents (colonnes login / mdp) ne sont jamais importés.</p>
-      <button class="btn" onclick="Import.lancer()">⇪ Importer le(s) fichier(s) adhérents</button> <button class="btn sec" onclick="Annuaire.ouvrir()">⇪ Fiches de l'annuaire académique (texte)</button></div>
+      <button class="btn" onclick="Import.lancer()">⇪ Importer le(s) fichier(s) adhérents (fichier du national)</button></div>
+      <div class="card"><h3 style="margin-top:0">Fiches de l'annuaire académique (rectorat)</h3>
+      <p class="small">Pour mettre à jour établissement, classe, corps, discipline et courriels à partir de l'annuaire. <b>Aucune colonne à régler</b> : choisis le fichier texte (.txt) des fiches ; s'il contient le bloc « MES CHOIX POUR LES NOMS », tes arbitrages sont repris tout seuls.</p>
+      <button class="btn" onclick="Annuaire.ouvrir()">⇪ Fiches de l'annuaire académique (texte)</button></div>
       <h2>Historique des imports</h2><div class="tablewrap"><table><thead><tr><th>Date</th><th>Fichier</th><th class="num">Lignes</th><th class="num">Nouveaux</th><th class="num">Mis à jour</th><th class="num">Corrections locales conservées</th><th class="num">Absents</th><th>Par</th></tr></thead><tbody>
       ${h.map(i => `<tr><td>${fmtDT(i.date)}</td><td>${esc(i.fichier)}</td><td class="num">${i.lignes}</td><td class="num">${i.nouveaux}</td><td class="num">${i.maj}</td><td class="num">${i.conflits}</td><td class="num">${i.absents}</td><td>${esc(userName(i.par))}</td></tr>`).join('') || '<tr><td colspan="8" class="mut">Aucun import</td></tr>'}</tbody></table></div>`;
   },
-  lancer(file) {
+  async lancer(file) {
+    if (!file) { file = await pickFile('.xlsx,.xls,.ods,.csv,.txt,.md,.xml', true); if (!file || !file.length) return; }
+    const fs = [].concat(file);
+    // Fichier de l'annuaire du rectorat ou fichier de choix de noms : pas de réglage de colonnes, on bascule vers l'import annuaire
+    for (const f of fs) {
+      if (/\.(txt|md|text)$/i.test(f.name)) { const t = await readFile(f, 'text'); if (/Fiche individuelle/i.test(t)) { UI.toast('Fichier de l\'annuaire reconnu : import annuaire', 'g'); return Annuaire.ouvrir(t); } }
+      if (/\.(xlsx|xls|ods)$/i.test(f.name)) { const sh = await readSheetFile(f); if (Object.keys(sh).some(n => /arbitr/i.test(n))) { await Annuaire.choixDepuis(sh, f.name); UI.toast('Fichier de choix de noms reconnu : choisis maintenant le fichier de l\'annuaire', 'g'); return Annuaire.ouvrir(); } }
+    }
     Mapper.open({ titre: 'Import du fichier adhérents — colonnes', fields: Import.FIELDS, profil: 'adherents', keepExtra: true, multiple: true, onDone: Import.analyser }, file);
   },
   statutFromText(v, disc) {
