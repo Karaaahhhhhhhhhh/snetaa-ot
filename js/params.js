@@ -138,12 +138,12 @@ const Carte = {
   couleur(e) { const C = Carte.COUL; return e.service || ['RECT', 'DSDEN', 'ADM', 'CIO'].includes(e.type) ? C.SRV : ['LP', 'SEP'].includes(e.type) ? C.LP : e.type === 'LPO' ? C.LPO : e.type === 'CLG' ? (e.segpa ? C.SEGPA : C.CLG) : e.type === 'SEGPA' ? C.SEGPA : e.type === 'EREA' ? C.EREA : C.LGT; },
   /* Fonds administratifs : départements, académies, zones de congés scolaires (métropole) */
   ZCOUL: { A: '#e86800', B: '#2f7fc1', C: '#5f9e3a', Corse: '#c80030' },
-  fondsAdmin() {
-    const G = window.GEO_FR; if (!G) return {};
-    if (!Carte.map.getPane('admin')) Carte.map.createPane('admin').style.zIndex = 350;
+  fondsAdmin(map) {
+    map = map || Carte.map; const G = window.GEO_FR; if (!G) return {};
+    if (!map.getPane('admin')) map.createPane('admin').style.zIndex = 350;
     const zc = z => Carte.ZCOUL[z] || '#888';
     const deps = L.geoJSON(G.deps, { pane: 'admin', style: { color: '#5a6478', weight: 1, fill: true, fillOpacity: 0, dashArray: '3 3' }, onEachFeature: (ft, l) => { const p = ft.properties; l.bindTooltip(`${p.code} — ${esc(p.nom)}<br><span class="small">Académie ${esc(p.acad)} · zone ${esc(p.zone)}</span>`, { sticky: true }); } });
-    const acads = L.layerGroup([L.geoJSON(G.acads, { pane: 'admin', style: ft => ({ color: '#601080', weight: 2.5, fillColor: '#601080', fillOpacity: ft.properties.nom === D.meta.syndicat.academie ? 0.10 : 0.02 }), onEachFeature: (ft, l) => { const p = ft.properties, s = typeof Sections !== 'undefined' && Sections.de(p.nom); l.bindPopup(`<b>Académie ${esc(p.nom)}</b><br>Zone de congés ${esc(p.zone)}${s ? `<br>SNETAA-FO : ${esc(s.responsables || '')}${s.mail ? '<br>✉ <a href="mailto:' + esc(s.mail) + '">' + esc(s.mail) + '</a>' : ''}${s.tel ? '<br>☎ ' + esc(s.tel) : ''}` : ''}`); } })]
+    const acads = L.layerGroup([L.geoJSON(G.acads, { pane: 'admin', style: ft => ({ color: '#601080', weight: 2.5, fillColor: '#601080', fillOpacity: ft.properties.nom === D.meta.syndicat.academie ? 0.10 : 0.02 }), onEachFeature: (ft, l) => { const p = ft.properties, s = typeof Sections !== 'undefined' && Sections.de(p.nom); l.bindPopup(`<b>Académie ${esc(p.nom)}</b><br>Zone de congés ${esc(p.zone)}${s ? `<br>SNETAA-FO : ${esc(s.responsables || '')}${s.mail ? '<br>✉ <a href="mailto:' + esc(s.mail) + '">' + esc(s.mail) + '</a>' : ''}${s.tel ? '<br>☎ ' + esc(s.tel) : ''}<br><button class="btn sm sec" style="margin-top:4px" onclick="Sections.fiche('${esc(s.id)}')">Fiche de la section</button>` : ''}`); } })]
       .concat(G.acads.features.map(ft => L.marker([ft.properties.lat, ft.properties.lon], { pane: 'admin', interactive: false, icon: L.divIcon({ className: 'acadlabel', html: esc(ft.properties.nom), iconSize: null }) }))));
     const zones = L.layerGroup([L.geoJSON(G.zones, { pane: 'admin', style: ft => ({ color: zc(ft.properties.zone), weight: 2, fillColor: zc(ft.properties.zone), fillOpacity: 0.22 }), onEachFeature: (ft, l) => { const z = ft.properties.zone, c = (window.CAL_SCOLAIRE || {}).calendriers || {}, k = c[z]; l.bindPopup(`<b>${z === 'Corse' ? 'Corse' : 'Zone ' + z}</b>${k ? '<br>' + k.v.map(v => `${esc(v[0])} : ${fmtDate(v[1])} → ${fmtDate(v[2])}`).join('<br>') : ''}<br><a href="#/agenda">Voir l'agenda des congés</a>`); } })]);
     return { 'Départements': deps, 'Académies': acads, 'Zones de congés scolaires': zones };
