@@ -365,15 +365,36 @@ async function ocrPlain(canvas){try{const w=await getOcr();const r=await w.recog
 const MOIS_RX="JANVIER|FEVRIER|MARS|AVRIL|MAI|JUIN|JUILLET|AOUT|SEPTEMBRE|OCTOBRE|NOVEMBRE|DECEMBRE";
 const KW={
   peage:["PEAGE","AUTOROUTE","APRR","VINCI","SANEF","COFIROUTE","ASF ","AREA","CLASSE 1","CLASSE1","GARE DE","BARRIERE","A71","A10","A20","A85","A19","A11"],
-  parking:["PARKING","STATIONNEMENT","HORODATEUR","INDIGO","EFFIA","Q-PARK","QPARK","SAEMES","DUREE","DUREE DE","ENTREE","PARC "],
-  restaurant:["RESTAURANT","BRASSERIE","BISTRO","MENU","PLAT DU JOUR","COUVERT","TABLE","SERVEUR","CAFE","DESSERT","BOISSON","PIZZ","BURGER","SANDWICH","FORMULE","RESTAU","CREPERIE","TRAITEUR","BOULANGERIE"],
+  parking:["VOIE PUBLIQUE","ORLEANS GESTION","HDU","PARKING","STATIONNEMENT","HORODATEUR","INDIGO","EFFIA","Q-PARK","QPARK","SAEMES","DUREE","DUREE DE","ENTREE","PARC "],
+  restaurant:["MCDONALD","BURGER KING","KFC","QUICK","PATAPAIN","CHICKEN","WOK","SUR PLACE","A EMPORTER","NAF 5610","APE 5610","5610C","5610A","CROUSTY","FRITE","SUBWAY","BRIOCHE DOREE","COURTEPAILLE","BUFFALO","FLUNCH","RESTAURANT","BRASSERIE","BISTRO","MENU","PLAT DU JOUR","COUVERT","TABLE","SERVEUR","CAFE","DESSERT","BOISSON","PIZZ","BURGER","SANDWICH","FORMULE","RESTAU","CREPERIE","TRAITEUR","BOULANGERIE"],
   carburant:["CARBURANT","GAZOLE","GASOIL","SP95","SP98","SP 95","SP 98","E10","E85","LITRES","LITRE","POMPE","STATION SERVICE","DIESEL"],
-  transport:["SNCF","TER ","TGV","BILLET","VOYAGEUR","TRAIN","AUTOCAR","REMI","TRAJET","VOITURE","PLACE"],
+  transport:["SNCF","TER ","TGV","BILLET DE TRAIN","VOYAGEUR","TRAIN","AUTOCAR","REMI","OUIGO","CARTE AVANTAGE"],
   hebergement:["HOTEL","CHAMBRE","NUITEE","TAXE DE SEJOUR","PETIT DEJEUNER","IBIS","B&B","CAMPANILE","KYRIAD"],
   convocation:["CONVOCATION","CONVOQUE","ORDRE DU JOUR","RECTORAT","DSDEN","ACADEMIE","MADAME, MONSIEUR","OBJET","SEANCE","REUNION","AUTORISATION D'ABSENCE","INSPECTION ACADEMIQUE","SNETAA","SECRETAIRE GENERAL"],
   postal:["LA POSTE","AFFRANCHISSEMENT","LETTRE RECOMMANDEE","COLISSIMO","TIMBRE","LETTRE VERTE"],
   telephonie:["ORANGE","SFR","BOUYGUES","FREE MOBILE","FORFAIT","FACTURE MOBILE","ABONNEMENT","INTERNET"]
 };
+/* émetteurs connus : reconnus d'emblée (et ceux que le déclarant a appris à l'application, prioritaires) */
+const EMETTEURS=[
+  [/VIN[CG][I1L]|COFIROUTE|\bASF\b|ESCOTA|ARCOUR/,"VINCI Autoroutes","peage"],[/\bAPRR\b|\bAREA\b/,"APRR","peage"],[/SANEF|\bSAPN\b/,"SANEF","peage"],[/ATLANDES/,"Atlandes","peage"],[/\bALIENOR\b|\bA65\b/,"A'liénor","peage"],
+  [/ORL[EÉ]?ANS\W{0,3}GEST|[\W_]HDU\b|VOIE PUBLIQUE[\s\S]*(NO AUTO|TICKET CLIENT)|(NO AUTO|TICKET CLIENT)[\s\S]*VOIE PUBLIQUE/,"Orléans Gestion","parking"],
+  [/INDIGO/,"Indigo","parking"],[/EFFIA/,"Effia","parking"],[/Q-?PARK/,"Q-Park","parking"],[/SAEMES/,"Saemes","parking"],[/INTERPARKING/,"Interparking","parking"],[/ONEPARK/,"Onepark","parking"],
+  [/MC ?DONALD/,"McDonald's","restaurant"],[/BURGER KING/,"Burger King","restaurant"],[/\bKFC\b/,"KFC","restaurant"],[/\bQUICK\b/,"Quick","restaurant"],[/PATAPA[I1T]N/,"Patapain","restaurant"],[/CHICKEN TEK/,"Chicken Tek","restaurant"],[/SUBWAY/,"Subway","restaurant"],[/BRIOCHE DOREE/,"Brioche Dorée","restaurant"],[/COURTEPAILLE/,"Courtepaille","restaurant"],
+  [/\bSNCF\b|OUIGO/,"SNCF","transport"],[/LA POSTE/,"La Poste","postal"]];
+function regleEmetteur(T){
+  const perso=(typeof ME!=="undefined"&&ME?prof().emetteurs||[]:[]);
+  for(const r of perso){const mots=String(r.mot||"").split(/[;,]/).map(x=>normTxt(x).trim()).filter(Boolean);if(mots.length&&mots.every(m=>T.includes(m)))return{emetteur:r.emetteur,type:r.type||"",sens:r.sens||"",perso:true}}
+  for(const [rx,e,t] of EMETTEURS)if(rx.test(T))return{emetteur:e,type:t};
+  return null;
+}
+const MOTS_VIDES=new Set("TICKET CONSERVER CLIENT CARTE BANCAIRE MONTANT TOTAL TOTAUX PAIEMENT DEBIT EUROS SIRET FRANCE MERCI BIENVENUE NOMBRE LIGNE LIGNES CODE TAUX PRIX CLASSE ENTREE SORTIE CAISSE COMMANDE VENDEUR DATE HEURE PUBLIQUE JETER VOIE DUPLICATA DOCUMENT ORIGINAL VERSION IMPRESSION CONTACT MASTERCARD COMPTANT".split(" "));
+function motCle(p){const T=normTxt(p.ocr||"");if(!T)return "";const E=normTxt(p.emetteur||"").split(/[^A-Z0-9]+/).filter(w=>w.length>=4&&T.includes(w));if(E.length)return E.slice(0,2).join(" ; ");
+  const cnt={};(T.match(/[A-Z]{5,}/g)||[]).forEach(w=>{if(!MOTS_VIDES.has(w))cnt[w]=(cnt[w]||0)+1});return (Object.entries(cnt).sort((a,b)=>b[1]-a[1]||b[0].length-a[0].length)[0]||[""])[0]}
+function apprendre(regle){const pr=prof();pr.emetteurs=(pr.emetteurs||[]).filter(r=>normTxt(r.mot)!==normTxt(regle.mot));pr.emetteurs.unshift(regle);
+  const mots=String(regle.mot).split(/[;,]/).map(x=>normTxt(x).trim()).filter(Boolean);let nb=0;
+  mine().filter(f=>!locked(f)).forEach(f=>f.pieces.forEach(q=>{const T=normTxt(q.ocr||"");if(!T||!mots.every(m=>T.includes(m)))return;if(q.lu&&q.emetteur!==q.lu.emetteur&&q.emetteur!==regle.emetteur)return;
+    if(q.emetteur===regle.emetteur&&(!regle.type||q.type===regle.type))return;q.emetteur=regle.emetteur;if(regle.type)q.type=regle.type;if(regle.sens)q.sens=regle.sens;q.resume=[TYPES[q.type],q.emetteur].filter(Boolean).join(" – ");nb++;touch(f)}));
+  touch(null);return nb}
 function normTxt(t){return String(t||"").toUpperCase().normalize("NFD").replace(/[̀-ͯ]/g,"").replace(/[’']/g,"'")}
 function parseText(raw,hintDoc){
   const T=normTxt(raw);const lines=T.split(/\n+/).map(s=>s.trim()).filter(Boolean);
@@ -382,7 +403,7 @@ function parseText(raw,hintDoc){
   if(best<2&&!hintDoc)type=best?type:"autre";
   // dates
   const now=new Date(),minD=new Date(now.getFullYear()-2,0,1),maxD=new Date(now.getFullYear()+1,11,31);const dates=[];
-  const push=(d,m,y,idx)=>{d=+d;m=+m;y=+y;if(y<100)y+=2000;if(m<1||m>12||d<1||d>31)return;const dt=new Date(y,m-1,d);if(dt<minD||dt>maxD||dt.getDate()!==d)return;dates.push({s:`${y}-${String(m).padStart(2,"0")}-${String(d).padStart(2,"0")}`,idx})};
+  const push=(d,m,y,idx)=>{d=+d;m=+m;y=+y;if(y<100)y+=2000;if(y>maxD.getFullYear()&&String(y).endsWith("8")){const y2=y-2;if(y2<=maxD.getFullYear())y=y2}if(m<1||m>12||d<1||d>31)return;const dt=new Date(y,m-1,d);if(dt<minD||dt>maxD||dt.getDate()!==d)return;dates.push({s:`${y}-${String(m).padStart(2,"0")}-${String(d).padStart(2,"0")}`,idx})};
   let m;const rx1=/(\d{1,2})\s?[\/.\-]\s?(\d{1,2})\s?[\/.\-]\s?(\d{4}|\d{2})(?!\d)/g;while((m=rx1.exec(T)))push(m[1],m[2],m[3],m.index);
   const rx2=new RegExp("(\\d{1,2})(?:ER)?\\s+("+MOIS_RX+")\\s+(\\d{4})","g");while((m=rx2.exec(T)))push(m[1],MOIS_RX.split("|").indexOf(m[2])+1,m[3],m.index);
   const rx3=/(20\d{2})-(\d{2})-(\d{2})/g;while((m=rx3.exec(T)))push(m[3],m[2],m[1],m.index);
@@ -392,15 +413,28 @@ function parseText(raw,hintDoc){
   let heure="";const rxH=/(?:^|[^\d\/.,])([01]?\d|2[0-3])\s?[:H]\s?([0-5]\d)(?![\d\/])/g;const hs=[];while((m=rxH.exec(T)))hs.push(m[1].padStart(2,"0")+":"+m[2]);
   if(hs.length)heure=hs[0];
   // montant
-  let montant="";
+  let montant="",mconf=0;
   if(type!=="convocation"){
-    const amt=s=>{const out=[];const r=/(\d{1,4})\s?[,.]\s?(\d{2})(?!\d)/g;let q;while((q=r.exec(s))){const v=parseFloat(q[1]+"."+q[2]);if(v>0&&v<2000)out.push(v)}return out};
-    const keyL=lines.filter(l=>/(TOTAL|TTC|MONTANT|A PAYER|NET|PAYE|REGLE|CB|CARTE|EUR|€|EUROS|PRIX|SOMME)/.test(l)&&!/TVA|HT\b|RENDU|RENDU MONNAIE/.test(l));
-    let c=[].concat(...keyL.map(amt));if(!c.length)c=amt(lines.filter(l=>!/TVA/.test(l)).join("\n"));
+    const amt=s=>{const out=[];const r=/(\d{1,4})\s?[,.]\s?(\d{2})(?!\d)(?!\s?%)/g;let q;while((q=r.exec(s))){const v=parseFloat(q[1]+"."+q[2]);if(v>0&&v<2000)out.push(v)}return out};
+    const exclu=l=>/T[VU]A|TYA|\bHT\b|RENDU|REMISE|MONNAIE|CAPITAL|POINTS|SOLDE/.test(l)&&!/TTC/.test(l.replace(/T[VU]A.*$/,""));
+    const keyL=lines.filter(l=>/(TOTAL|TTC|MONTANT|A PAYER|NET|PAYE|REGLE|CB|CARTE|EUR|€|EUROS|PRIX|SOMME|DEBIT)/.test(l)&&!exclu(l));
+    let c=[].concat(...keyL.map(amt));if(c.length)mconf=keyL.some(l=>/TTC|TOTAL/.test(l)&&amt(l).length)?2:1;else c=amt(lines.filter(l=>!exclu(l)).join("\n"));
     if(c.length)montant=Math.max(...c);
+    // cohérence HT + TVA = TTC (péages : « Prix HT 10,08 · TVA 2,02 · TTC 12,10 »), ou TVA à 20 % × 6
+    const un=l=>{const a=amt(l);return a.length===1?a[0]:null};
+    const der=l=>{const a=amt(l);return a.length?a[a.length-1]:null};
+    const htL=lines.find(l=>/\bHT\b/.test(l)&&!/TTC|T[VU]A/.test(l)&&un(l)!=null),tvaL=lines.find(l=>/T[VUY]A/.test(l)&&!/\bHT\b|TTC|TOTAUX/.test(l)&&der(l)!=null);
+    const ht=htL?un(htL):null,tva=tvaL?der(tvaL):null;
+    if(ht!=null&&tva!=null&&tva<ht){const t=r2(ht+tva);const near=c.find(v=>Math.abs(v-t)<.03);montant=near!=null?near:t;mconf=3}
+    else if(tva!=null&&/\(?20[,.]0|20 ?%/.test(tvaL)){const t=r2(tva*6);const near=[].concat(c,amt(T)).filter(v=>Math.abs(v-t)<=Math.max(.06,t*.01));if(near.length){montant=near[0];mconf=3}else if(montant===""||montant<t*.6){montant=t;mconf=2}}
   }
   // émetteur : première ligne avec du texte
-  const emetteur=(String(raw||"").split(/\n+/).map(s=>s.trim()).find(l=>/[A-Za-zÀ-ÿ]{3,}/.test(l))||"").replace(/[^\wÀ-ÿ'&\- .]/g,"").trim().slice(0,40);
+  const moi=typeof ME!=="undefined"&&ME?normTxt(ME.prenom||""):"";
+  const brut=String(raw||"").split(/\n+/).map(s=>s.trim());
+  const resto=brut.find(l=>/^\W*RESTAURANT\s+\S{3,}/i.test(l));
+  let emetteur=resto?resto.replace(/^\W*RESTAURANT\s+/i,""):(brut.find(l=>{const u=normTxt(l);return /[A-ZÀ-ÿ]{3,}/i.test(l)&&!/^\W*\d/.test(u)&&!/^\W*(TICKET|DUPLICATA|CLIENT|BIENVENUE|MERCI|NOMBRE|DATE|COMMANDE|JUSTIFICATIF|DOCUMENT|NF525|SIRET|TEL|CB |CARTE|TOTAL|QTE|ARTICLE|PRODUIT|DESIGNATION|LE \d)/.test(u)&&!(moi&&u.includes(moi))&&(u.match(/[A-Z]/g)||[]).length>=u.replace(/\s/g,"").length*.6})||"");
+  emetteur=emetteur.replace(/[^\wÀ-ÿ'&\- .]/g,"").replace(/\s{2,}/g," ").trim().slice(0,40);
+  let sensR="";const R=regleEmetteur(T);if(R){emetteur=R.emetteur;if(R.type&&TYPES[R.type])type=R.type;sensR=R.sens||""}
   // motif (convocation)
   let motif="";
   if(type==="convocation"){const has=s=>T.includes(s);const acad=has("ACADEMIQUE")||has("RECTORAT"),dep=has("DEPARTEMENT")||has("DSDEN");
@@ -417,7 +451,7 @@ function parseText(raw,hintDoc){
     else if(has("AUDIENCE"))motif=dep?"Audience DSDEN":acad?"Audience rectorat":"Audience établissement";
     if(motif&&!motifsList().includes(motif)){const near=motifsList().find(x=>normTxt(x)===normTxt(motif));if(near)motif=near}}
   const resume=[TYPES[type],emetteur].filter(Boolean).join(" – ");
-  return{type,date,heure,montant,emetteur,resume,motif,found:!!(date||montant)};
+  return{type,date,heure,montant,emetteur,resume,motif,sens:sensR,connu:!!R,mconf,ocr:T.slice(0,1500),found:!!(date||montant)};
 }
 
 /* ============ Détection des pièces sur une photo ============ */
@@ -467,6 +501,28 @@ function detectPieces(src){
   const big=Math.max(0,...comps.map(c=>c.area));const keep=comps.filter(c=>c.area>big*.08);
   keep.sort((a,b)=>Math.abs(a.cy-b.cy)>H*.15?a.cy-b.cy:a.cx-b.cx);
   return keep.map(c=>{const mx=c.cx,my=c.cy;return c.rect.map(([x,y])=>[Math.min(1,Math.max(0,(mx+(x-mx)*1.015)/W)),Math.min(1,Math.max(0,(my+(y-my)*1.015)/H))])});
+}
+/* tickets blancs sur fond blanc (scanner) : on regroupe les blocs de texte, plus serrés en largeur qu'en hauteur */
+function textClusters(src){
+  const sm=scaled(src,900),W=sm.width,H=sm.height,N=W*H;const d=sm.getContext("2d",{willReadFrequently:true}).getImageData(0,0,W,H).data;
+  const L=new Uint8Array(N);const br=[];for(let i=0;i<N;i++){const k=i*4;L[i]=(d[k]*.3+d[k+1]*.59+d[k+2]*.11)|0}
+  for(let x=0;x<W;x+=3){br.push(L[x],L[(H-1)*W+x])}for(let y=0;y<H;y+=3){br.push(L[y*W],L[y*W+W-1])}br.sort((a,b)=>a-b);const bg=br[br.length>>1];
+  if(bg<200)return[];
+  const dark=new Uint8Array(N);let nd=0;for(let i=0;i<N;i++)if(L[i]<bg-60){dark[i]=1;nd++}
+  if(nd<N*.01||nd>N*.4)return[];
+  const M=Math.max(W,H),rx=Math.max(3,Math.round(M*.0067)),ry=Math.max(6,Math.round(M*.0156));
+  const I=new Uint32Array((W+1)*(H+1));for(let y=0;y<H;y++){let rs=0;for(let x=0;x<W;x++){rs+=dark[y*W+x];I[(y+1)*(W+1)+x+1]=I[y*(W+1)+x+1]+rs}}
+  const m=new Uint8Array(N);for(let y=0;y<H;y++){const y0=Math.max(0,y-ry),y1=Math.min(H-1,y+ry);for(let x=0;x<W;x++){const x0=Math.max(0,x-rx),x1=Math.min(W-1,x+rx);
+    if(I[(y1+1)*(W+1)+x1+1]-I[y0*(W+1)+x1+1]-I[(y1+1)*(W+1)+x0]+I[y0*(W+1)+x0])m[y*W+x]=1}}
+  const lab=new Int32Array(N);let nl=0;const boxes=[];
+  for(let i=0;i<N;i++){if(!m[i]||lab[i])continue;nl++;lab[i]=nl;const stk=[i];let x0=W,y0=H,x1=0,y1=0;
+    while(stk.length){const j=stk.pop(),x=j%W,y=(j/W)|0;if(x<x0)x0=x;if(x>x1)x1=x;if(y<y0)y0=y;if(y>y1)y1=y;
+      if(x>0&&m[j-1]&&!lab[j-1]){lab[j-1]=nl;stk.push(j-1)}if(x<W-1&&m[j+1]&&!lab[j+1]){lab[j+1]=nl;stk.push(j+1)}if(y>0&&m[j-W]&&!lab[j-W]){lab[j-W]=nl;stk.push(j-W)}if(y<H-1&&m[j+W]&&!lab[j+W]){lab[j+W]=nl;stk.push(j+W)}}
+    const bw=x1-x0,bh=y1-y0;if(bw*bh>N*.02&&bw>W*.08&&bh>H*.08)boxes.push([x0,y0,x1,y1])}
+  if(boxes.length<2)return[];
+  boxes.sort((a,b)=>Math.abs(a[1]-b[1])>H*.1?a[1]-b[1]:a[0]-b[0]);
+  const px=W*.012,py=H*.012,c=v=>Math.min(1,Math.max(0,v));
+  return boxes.map(([x0,y0,x1,y1])=>[[c((x0-px)/W),c((y0-py)/H)],[c((x1+px)/W),c((y0-py)/H)],[c((x1+px)/W),c((y1+py)/H)],[c((x0-px)/W),c((y1+py)/H)]]);
 }
 const okDate=s=>typeof s==="string"&&/^\d{4}-\d{2}-\d{2}$/.test(s)?s:"";
 const okTime=s=>{if(typeof s!=="string")return "";const m=s.match(/^(\d{1,2})[:hH](\d{2})/);return m?m[1].padStart(2,"0")+":"+m[2]:""};
@@ -835,6 +891,9 @@ function viewReg(){
     <div class="card pad stack"><div class="eyebrow">Mes distances enregistrées (${dist.length})</div>
       <div class="small mut">Elles passent avant le calcul d'itinéraire : corrige-les pour coller à ton trajet réel (détour, covoiturage…).</div>
       ${dist.map(([k,v])=>`<div class="trajet-row"><span class="small">${esc(lab(k))}</span><input type="number" min="0" step="0.1" inputmode="decimal" data-dist="${esc(k)}" value="${n(v.km)}" aria-label="Km"><button class="btn sm ghost danger" data-act="delDist" data-i="${esc(k)}" aria-label="Supprimer">✕</button></div>`).join("")||`<div class="small mut">Aucune pour l'instant : chaque distance saisie ou calculée s'enregistre ici.</div>`}</div>
+    <div class="card pad stack"><div class="eyebrow">Mes émetteurs habituels (${(pr.emetteurs||[]).length})</div>
+      <div class="small mut">Reconnus d'office sur les tickets, avant la liste intégrée (VINCI Autoroutes, APRR, Orléans Gestion, Indigo, McDonald's…). Pour en ajouter un : ouvre un justificatif, corrige l'émetteur et coche « Reconnaître automatiquement ».</div>
+      ${(pr.emetteurs||[]).map((r,k)=>`<div class="row" style="gap:6px;flex-wrap:nowrap"><input type="text" style="flex:1;min-width:0" value="${esc(r.mot)}" aria-label="Mot repéré" onchange="Frais._t.prof().emetteurs[${k}].mot=this.value;save()"><span class="small">→</span><input type="text" style="flex:1;min-width:0" value="${esc(r.emetteur)}" aria-label="Émetteur" onchange="Frais._t.prof().emetteurs[${k}].emetteur=this.value;save()"><span class="chip">${esc(TYPES[r.type]||"")}</span><button class="btn sm ghost danger" onclick="Frais._t.prof().emetteurs.splice(${k},1);save();Frais.page()">✕</button></div>`).join("")||'<span class="small mut">Aucun pour l’instant.</span>'}</div>
     <div class="card pad stack"><div class="eyebrow">Mes trajets habituels (mode « Trajet habituel »)</div>
       ${pr.trajets.map((t,k)=>`<div class="trajet-row"><input type="text" data-traj="${k}|label" value="${esc(t.label)}" aria-label="Trajet"><input type="number" min="0" inputmode="decimal" data-traj="${k}|km" value="${n(t.km)}" aria-label="Km"><button class="btn sm ghost danger" data-act="delTraj" data-i="${k}" aria-label="Supprimer">✕</button></div>`).join("")}
       <button class="btn sm sec" data-act="addTraj" style="align-self:flex-start">+ Ajouter un trajet</button></div>
@@ -1158,8 +1217,12 @@ async function ingest(files,preDep){
     const upd=s=>{job.status=s;renderView()};
     try{
       const isPdf=file.type==="application/pdf"||/\.pdf$/i.test(file.name||"");
-      const made=[];let readOk=true;
-      if(isPdf){
+      const made=[];let readOk=true;let pageScan=null,tcQuads=null;
+      if(isPdf&&st.cutMode!=="single"){ // scan de plusieurs tickets enregistré en PDF : on le traite comme une photo
+        upd("lecture du PDF…");const r0=await pdfToCanvases(file);
+        if(r0.pages.length===1&&(!r0.text||r0.text.replace(/\s/g,"").length<30)){const tc=textClusters(r0.pages[0]);if(tc.length>=2){pageScan=r0.pages[0];tcQuads=tc}}
+      }
+      if(isPdf&&!pageScan){
         upd("lecture du PDF…");const r=await pdfToCanvases(file);
         const ids=[];for(const c of r.pages){ids.push(await Store.putImage(await toBlob(c,"image/jpeg",.85)))}
         ids.forEach((id,i)=>srcCache.set(id,r.pages[i]));
@@ -1167,21 +1230,35 @@ async function ingest(files,preDep){
         const a=parseText(text,true);if(!text)readOk=false;
         made.push(mkPiece(a,ids[0],FULL.map(p=>p.slice()),ids[0],{pages:ids,enhance:false,isDoc:true,nbPages:r.total,keepSrc:true}));
       }else{
-        const canvas=await fileToCanvas(file);
+        const canvas=pageScan||await fileToCanvas(file);
         upd("enregistrement de l'original…");
         const srcId=await Store.putImage(await toBlob(canvas,"image/jpeg",.85));srcCache.set(srcId,canvas);
         upd("recherche des justificatifs sur la photo…");await sleep(30);
-        let quads=st.cutMode==="single"?[]:detectPieces(canvas);
+        let quads=tcQuads||(st.cutMode==="single"?[]:detectPieces(canvas));
         if(!quads.length)quads=[refineCorners(canvas,FULL,true)||FULL.map(p=>p.slice())];
+        for(let pass=0;pass<2;pass++){const ici=[];
         let i=0;
         for(const q of quads){i++;const pre=quads.length>1?`pièce ${i}/${quads.length} : `:"";
           upd(pre+"redressement…");await sleep(10);
           const w0=warp(canvas,q,0,true);
           ocrLog=p=>{job.status=`${pre}lecture du texte… ${Math.round(p*100)} %`;const el=$("#frView");if(el&&st.tab==="pieces")renderView()};
           const o=await ocrBest(w0,s=>upd(pre+s));ocrLog=null;if(!o.ok)readOk=false;
-          const a=parseText(o.text,false);
-          made.push(mkPiece(a,srcId,q,await Store.putImage(await toBlob(rotCanvas(w0,o.rot),"image/jpeg",.86)),{rot:o.rot,enhance:true}));
+          let a=parseText(o.text,false);
+          // une seule pièce et lecture incomplète : on relit la photo entière (le détourage a pu couper le haut ou le bas du ticket)
+          if(quads.length===1&&(!a.date||a.montant===""||(a.mconf||0)<2||a.type==="autre"||!a.connu)){
+            upd("relecture de la photo entière…");let o2=null;try{const w=await getOcr();const r=await w.recognize(rotCanvas(scaled(canvas,2000),o.rot||0));o2={text:r.data.text||""}}catch(e){console.warn(e)}
+            if(o2&&o2.text){const b=parseText(o2.text,false),both=parseText(o.text+"\n"+o2.text,false);
+              a=Object.assign({},a,{date:a.date||b.date,heure:a.heure||b.heure,montant:a.montant===""||(b.montant!==""&&(b.mconf||0)>(a.mconf||0))?b.montant:a.montant,motif:a.motif||b.motif});
+              if(b.connu||both.connu){const k=b.connu?b:both;a.type=k.type;a.emetteur=k.emetteur;a.sens=k.sens;a.connu=true}
+              else if(a.type==="autre"&&b.type!=="autre"){a.type=b.type;a.emetteur=a.emetteur||b.emetteur}
+              a.resume=[TYPES[a.type],a.emetteur].filter(Boolean).join(" – ");a.ocr=(a.ocr+"\n"+b.ocr).slice(0,3000);a.found=!!(a.date||a.montant)}}
+          const pc=mkPiece(a,srcId,q,await Store.putImage(await toBlob(rotCanvas(w0,o.rot),"image/jpeg",.86)),{rot:o.rot,enhance:true});pc._vide=a.type==="autre"&&!a.date&&a.montant==="";ici.push(pc);
         }
+        // découpage en trop (logo, ombre, pli) : les morceaux sans rien de lisible sont écartés ; si tout est vide, on relit la photo comme un seul ticket
+        if(quads.length>1&&!tcQuads){const pleins=ici.filter(x=>!x._vide);ici.filter(x=>x._vide).forEach(x=>Store.delImage(x.imgId));
+          if(pass===0&&(!pleins.length||(pleins.length===1&&(!pleins[0].date||pleins[0].montant==="")))){pleins.forEach(x=>Store.delImage(x.imgId));quads=[refineCorners(canvas,FULL,true)||FULL.map(p=>p.slice())];continue}
+          ici.length=0;ici.push(...pleins)}
+        ici.forEach(x=>{delete x._vide;made.push(x)});break}
       }
       const F=get(fid);if(!F)throw new Error("fiche supprimée");
       let created=0,dbl=0;
@@ -1198,7 +1275,7 @@ async function ingest(files,preDep){
 }
 function mkPiece(a,srcId,corners,imgId,extra={}){
   const type=TYPES[a.type]?a.type:"autre";const heure=okTime(a.heure);
-  const p={id:"p"+uid(),srcId,corners,rot:0,enhance:true,imgId,type,date:okDate(a.date),heure,montant:a.montant==null||a.montant===""?"":r2(n(a.montant)),emetteur:String(a.emetteur||""),lieu:"",resume:String(a.resume||""),motif:a.motif?String(a.motif):"",sens:type==="parking"?"na":guessSens(heure),depId:"",
+  const p={id:"p"+uid(),srcId,corners,rot:0,enhance:true,imgId,type,date:okDate(a.date),heure,montant:a.montant==null||a.montant===""?"":r2(n(a.montant)),emetteur:String(a.emetteur||""),lieu:"",resume:String(a.resume||""),motif:a.motif?String(a.motif):"",ocr:a.ocr||"",sens:a.sens||(type==="parking"?"na":guessSens(heure)),lu:{type,emetteur:String(a.emetteur||"")},depId:"",
     needsCheck:!okDate(a.date)||(type!=="convocation"&&(a.montant==null||a.montant===""))||type==="autre",addedAt:Date.now()};
   return Object.assign(p,extra);
 }
@@ -1333,8 +1410,11 @@ async function openEditor(pid){
           <label class="f c6"><span>Date</span><input type="date" id="edDate" value="${esc(p.date)}"></label>
           <label class="f c6"><span>Heure</span><input type="time" id="edHeure" value="${esc(p.heure)}"></label>
           <label class="f c12"><span>Description</span><input type="text" id="edResume" value="${esc(p.resume)}"></label>
-          <label class="f c6"><span>Émetteur</span><input type="text" id="edEmet" value="${esc(p.emetteur)}"></label>
+          <label class="f c6"><span>Émetteur</span><input type="text" id="edEmet" value="${esc(p.emetteur)}" oninput="const c=document.getElementById('edLearn');if(c)c.checked=true"></label>
           <label class="f c6"><span>Trajet</span><select id="edSens">${selOpts([["na","—  (ni aller ni retour)"],["aller","Aller"],["retour","Retour"]],p.sens||"aller")}</select></label>
+          <div class="c12 fr-notice info" style="display:flex;flex-direction:column;gap:6px"><label class="row small" style="gap:8px"><input type="checkbox" id="edLearn" ${p.lu&&p.lu.emetteur!==p.emetteur?"checked":""}> <b>Reconnaître automatiquement ce ticket la prochaine fois</b></label>
+            <label class="f"><span>quand le ticket contient le mot (plusieurs : séparés par « ; »)</span><input type="text" id="edMot" value="${esc(motCle(p))}" placeholder="ex. COFIROUTE, HDU…"></label>
+            <span class="small mut">→ émetteur, type et trajet ci-dessus seront repris d'office. Liste modifiable dans Réglages.</span></div>
           <label class="f c12"><span>Déplacement</span><select id="edDep">${depOptions(f,isAssigned(p,f)?p.depId:"")}</select></label>
         </div></fieldset>
         ${lk?"":`<div class="row" style="justify-content:space-between"><button class="btn sm ghost danger" data-ed="askDel">Supprimer</button><button class="btn" data-ed="save">Enregistrer</button></div>`}
@@ -1343,6 +1423,11 @@ async function openEditor(pid){
     </div></div>`;
   const box=$("#cropbox");
   ["0","1","2","3"].forEach(i=>{const h=document.createElement("div");h.className="handle h"+i;h.textContent=["①","②","③","④"][i];h.dataset.h=i;box.appendChild(h)});
+  { // description = type + émetteur, mise à jour tant qu'elle n'a pas été réécrite à la main
+    const auto=()=>[TYPES[$("#edType").value],$("#edEmet").value.trim()].filter(Boolean).join(" – ");const R=$("#edResume");
+    if(R){let libre=!!p.resume&&p.resume!==[TYPES[p.type],p.emetteur].filter(Boolean).join(" – ");const maj=()=>{if(!libre)R.value=auto()};
+      if(!libre&&R.value!==auto())R.value=auto();
+      $("#edType").addEventListener("change",maj);$("#edEmet").addEventListener("input",maj);R.addEventListener("input",()=>{libre=R.value.trim()!==""&&R.value!==auto()})}}
   drawCrop();
   let drag=null;
   box.addEventListener("pointerdown",e=>{const h=e.target.closest(".handle");if(!h)return;drag=+h.dataset.h;h.setPointerCapture(e.pointerId);e.preventDefault()});
@@ -1376,6 +1461,7 @@ document.addEventListener("click",async e=>{
     const oldDep=p.depId;
     p.type=$("#edType").value;p.montant=$("#edMontant").value===""?"":r2(n($("#edMontant").value));p.date=$("#edDate").value;p.heure=$("#edHeure").value;p.resume=$("#edResume").value;p.emetteur=$("#edEmet").value;p.sens=$("#edSens").value;
     let dv=$("#edDep").value;if(dv==="__new"){const d=newDep(p.date||today());f.deps.push(d);dv=d.id}p.depId=dv;
+    {const L=$("#edLearn"),mot=($("#edMot")||{}).value||"";if(L&&L.checked&&mot.trim()&&p.emetteur.trim()){const nb=apprendre({mot:mot.trim(),emetteur:p.emetteur.trim(),type:p.type,sens:p.sens});setTimeout(()=>toast("Retenu : « "+mot.trim()+" » → "+p.emetteur.trim()+(nb?` · ${nb} autre${nb>1?"s":""} justificatif${nb>1?"s":""} mis à jour`:"")),300)}}
     p.needsCheck=false;p.doublon=doublons(f,p);
     try{
       if(ed.changed||ed.enhance!==(p.enhance!==false)){
