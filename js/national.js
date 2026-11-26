@@ -81,10 +81,11 @@ const Natl = {
     if (!x) return '';
     const st = Natl.standard(), sec = x.academie && typeof Sections !== 'undefined' ? Sections.de(x.academie) : null, out = [];
     if (/^o/i.test(x.auSiege || '')) out.push(`<div><span class="tag ok">bureau au siège</span><br>${Natl.telLien(x.telSiege || st.tel)}${x.mailSiege || st.mail ? '<br>' + Natl.mailLien(x.mailSiege || st.mail) : ''}</div>`);
-    if (x.tel || x.mail) out.push(`<div>${Natl.telLien(x.tel)}${x.tel && x.mail ? '<br>' : ''}${Natl.mailLien(x.mail)}</div>`);
+    const siege = /^o/i.test(x.auSiege || ''), mails = [x.mail, siege ? '' : x.mailSiege].filter(Boolean).join(' ');
+    if (x.tel || mails) out.push(`<div>${Natl.telLien(x.tel)}${x.tel && mails ? '<br>' : ''}${Natl.mailLien(mails)}</div>`);
     if (!/^o/i.test(x.auSiege || '')) {
       if (sec) out.push(`<div class="small"><span class="mut">Via sa section (${esc(sec.academie)}) :</span><br>${Natl.telLien(sec.tel)}${sec.mail ? '<br>' + Natl.mailLien(sec.mail) : ''}</div>`);
-      else if (!x.tel && !x.mail) out.push(`<div class="small"><span class="mut">Via le siège :</span><br>${Natl.telLien(st.tel)}<br>${Natl.mailLien(st.mail)}</div>`);
+      else if (!x.tel && !mails) out.push(`<div class="small"><span class="mut">Via le siège :</span><br>${Natl.telLien(st.tel)}<br>${Natl.mailLien(st.mail)}</div>`);
       out.push('<div class="small mut">Présent(e) au siège les jours de bureau national</div>');
     }
     if (x.remarque) out.push(`<div class="small mut">${esc(x.remarque)}</div>`);
