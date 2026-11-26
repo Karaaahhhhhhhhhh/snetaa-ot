@@ -8,9 +8,11 @@ const Mandats = {
     ['S1', 'Délégué·e d\'établissement (S1)', 'etab'], ['S1A', 'Délégué·e d\'établissement suppléant·e (S1)', 'etab'],
     ['S2', 'Secrétaire départemental·e (S2)', 'dep'], ['S2A', 'Secrétaire départemental·e adjoint·e (S2)', 'dep'],
     ['S3', 'Secrétaire académique (S3)', 'acad'], ['S3A', 'Secrétaire académique adjoint·e (S3)', 'acad'],
-    ['TRES', 'Trésorier·e académique', 'acad'], ['TRESA', 'Trésorier·e adjoint·e', 'acad'], ['BUR', 'Membre du bureau académique', 'acad'],
+    ['TRES', 'Trésorier·e académique', 'acad'], ['TRESA', 'Trésorier·e adjoint·e', 'acad'], ['SEC', 'Membre du secrétariat académique', 'acad'], ['BUR', 'Membre du bureau académique', 'acad'], ['CSA', 'Membre du conseil syndical académique', 'acad'],
     ['REP', 'Représentant·e désigné·e (instance)', 'acad']
   ],
+  ADJ: /^(S[123]|TRES)A$/,
+  court(t) { return { SEC: 'Secrétariat', BUR: 'Bureau', CSA: 'Conseil synd.', REP: 'Représ.' }[t] || t.replace(Mandats.ADJ, '$1 adj.'); },
   type(k) { return Mandats.TYPES.find(t => t[0] === k) || [k, k, 'acad']; },
   actif(m) { return !m.fin || m.fin >= todayISO(); },
   tous() { const l = []; D.personnes.forEach(p => (p.mandats || []).forEach(m => l.push({ p, m }))); return l; },
@@ -22,19 +24,19 @@ const Mandats = {
     if (t[2] === 'dep') return t[1] + ' — ' + m.dep + ' ' + (REF.departements[m.dep] || '');
     return t[1] + (m.precision ? ' — ' + m.precision : '');
   },
-  tags(p) { return Mandats.de(p).map(m => `<span class="tag v" title="${esc(Mandats.libelle(m))}">${esc(m.type.replace('A', ' adj.'))}${m.dep ? ' ' + esc(m.dep) : ''}</span>`).join(' '); },
+  tags(p) { return Mandats.de(p).map(m => `<span class="tag v" title="${esc(Mandats.libelle(m))}">${esc(Mandats.court(m.type))}${m.dep ? ' ' + esc(m.dep) : ''}</span>`).join(' '); },
   s1(uai) { return Mandats.actifs().filter(x => x.m.uai === uai && /^S1/.test(x.m.type)); },
   s2(dep) { return Mandats.actifs().filter(x => x.m.dep === dep && /^S2/.test(x.m.type)); },
   /* ---------- Page organigramme ---------- */
   page() {
     const g = can('adh.modifier');
     const acad = Mandats.actifs().filter(x => Mandats.type(x.m.type)[2] === 'acad').sort((a, b) => Mandats.TYPES.findIndex(t => t[0] === a.m.type) - Mandats.TYPES.findIndex(t => t[0] === b.m.type));
-    const pers = x => `<a href="#/fiche/${x.p.id}"><b>${esc(P.full(x.p))}</b></a>${x.m.type.endsWith('A') ? ' <span class="small mut">(adj./suppl.)</span>' : ''}<div class="small mut">${esc(P.etab(x.p))}${x.p.telPortable ? ' · ' + esc(x.p.telPortable) : ''}${x.p.email ? ' · ' + esc(x.p.email) : ''}</div>`;
+    const pers = x => `<a href="#/fiche/${x.p.id}"><b>${esc(P.full(x.p))}</b></a>${Mandats.ADJ.test(x.m.type) ? ' <span class="small mut">(adj./suppl.)</span>' : ''}<div class="small mut">${esc(P.etab(x.p))}${x.p.telPortable ? ' · ' + esc(x.p.telPortable) : ''}${x.p.email ? ' · ' + esc(x.p.email) : ''}</div>`;
     const cnt = Etabs.compte();
     const etabsPro = D.etablissements.filter(e => !e.service && (cnt[e.uai] || ['LP', 'SEP', 'LPO'].includes(e.type)));
     const sansS1 = etabsPro.filter(e => cnt[e.uai] && cnt[e.uai].adh && !Mandats.s1(e.uai).length);
     $('#main').innerHTML = `<div class="pagehead"><div><h1>Mandats & délégués</h1><div class="mut small">S1 : délégués d'établissement · S2 : secrétaires départementaux · S3 : secrétariat académique et bureau</div></div>
-      <div class="actions">${g ? `<button class="btn" onclick="Mandats.designer()">+ Désigner</button>` : ''}<button class="btn sec" onclick="Mandats.exporter()">Exporter</button><button class="btn sec" onclick="window.print()">🖨 Imprimer</button></div></div>
+      <div class="actions">${g ? `<button class="btn" onclick="Mandats.designer()">+ Désigner</button><button class="btn sec" onclick="Mandats.lot()">+ Désigner une instance (liste de noms)</button>` : ''}<button class="btn sec" onclick="Mandats.exporter()">Exporter</button><button class="btn sec" onclick="window.print()">🖨 Imprimer</button></div></div>
       <div class="card"><h2 style="margin-top:0">Niveau académique (S3)</h2>${acad.map(x => `<div style="display:grid;grid-template-columns:260px 1fr auto;gap:.6rem;padding:.35rem 0;border-bottom:1px solid var(--line)"><div class="small"><b>${esc(Mandats.type(x.m.type)[1])}</b>${x.m.precision ? '<br>' + esc(x.m.precision) : ''}</div><div>${pers(x)}</div><div class="noprint">${g ? `<button class="btn sm ghost" onclick="Mandats.edit('${x.p.id}','${x.m.id}')">Modifier</button>` : ''}</div></div>`).join('') || '<p class="mut">Aucun mandat académique enregistré.</p>'}</div>
       <div class="card"><h2 style="margin-top:0">Secrétaires départementaux (S2)</h2><div class="grid g3">${Object.entries(REF.departements).map(([d, n]) => { const l = Mandats.s2(d); return `<div style="border:1px solid var(--line);border-radius:8px;padding:.6rem"><b>${d} — ${esc(n)}</b>${l.map(x => `<div style="margin-top:.3rem">${pers(x)}</div>`).join('') || '<div class="small" style="color:var(--bord);margin-top:.3rem">Poste à pourvoir</div>'}${g ? `<div class="noprint" style="margin-top:.4rem"><button class="btn sm sec" onclick="Mandats.designer({type:'S2',dep:'${d}'})">Désigner</button></div>` : ''}</div>`; }).join('')}</div></div>
       <div class="card"><h2 style="margin-top:0">Délégués d'établissement (S1)</h2>
@@ -90,6 +92,50 @@ const Mandats = {
     const p = P.get(pid); p.mandats = p.mandats || []; p.mandats.push(md);
     if (p.categorie !== 'adherent') UI.toast('Attention : ' + P.full(p) + ' n\'est pas enregistré·e comme adhérent·e', 'r');
     P.touch(p); log('Désignation', P.full(p) + ' : ' + Mandats.libelle(md)); App.route();
+  },
+  /* ---------- Désignation en lot (instances élues : bureau, conseil syndical, secrétariat…) ---------- */
+  lot() {
+    const acad = Mandats.TYPES.filter(t => t[2] === 'acad').map(t => [t[0], t[1]]);
+    UI.modal('Désigner une instance à partir d\'une liste de noms', `<p class="small mut">Colle la liste des membres élus (copiée depuis le PDF ou un tableau), un nom par ligne ou séparés par des virgules, au format « Nom Prénom ». Pour plusieurs instances d'un coup, mets le code de l'instance entre crochets sur sa propre ligne : <code>[BUR]</code>, <code>[CSA]</code>, <code>[SEC]</code>, <code>[S3]</code>, <code>[TRES]</code>…</p>
+      <div class="frow"><div class="f"><label>Instance (si pas de crochets)</label><select id="ml_t">${UI.opts(acad, 'BUR')}</select></div><div class="f"><label>Début du mandat (date du congrès)</label><input type="date" id="ml_d" value="${todayISO()}"></div><div class="f"><label>Précision</label><input id="ml_p" placeholder="ex. Congrès académique"></div></div>
+      <div class="f"><label>Noms</label><textarea id="ml_n" style="min-height:180px" placeholder="[BUR]&#10;DUPONT Marie&#10;MARTIN Paul&#10;[CSA]&#10;…" oninput="Mandats.lotApercu()"></textarea></div>
+      <div id="ml_res" class="small"></div>`,
+      [{ label: 'Annuler' }, { label: 'Désigner', onClick: m => Mandats.lotValider(m) }], { wide: true });
+  },
+  lotAnalyse() {
+    const def = $('#ml_t').value, acad = Mandats.TYPES.filter(t => t[2] === 'acad').map(t => t[0]);
+    const idx = {}; D.personnes.filter(p => !p.archive).forEach(p => { idx[norm(p.nom + ' ' + p.prenom)] = p; idx[norm(p.prenom + ' ' + p.nom)] = p; });
+    const trouve = n => { const k = norm(n); if (idx[k]) return idx[k];
+      const mots = k.split(' ').filter(w => w.length > 1); if (mots.length < 2) return null;
+      const c = D.personnes.filter(p => !p.archive && mots.every(w => norm(p.nom + ' ' + p.prenom).split(' ').some(z => z === w || (w.length > 3 && Mandats.proche(z, w)))));
+      return c.length === 1 ? c[0] : null; };
+    let type = def; const out = [];
+    $('#ml_n').value.split(/\n/).forEach(l => {
+      const m = l.match(/^\s*\[\s*([A-Za-z0-9]+)\s*\]\s*$/); if (m) { const t = m[1].toUpperCase(); if (acad.includes(t)) type = t; return; }
+      l.split(/[,;\t]/).map(x => x.replace(/^\s*[-•*\d.)]+\s*/, '').trim()).filter(x => x.length > 2).forEach(n => out.push({ n, type, p: trouve(n) }));
+    });
+    return out;
+  },
+  /* deux mots « proches » : une lettre changée, ajoutée ou retirée (fautes de frappe, Lucy / Lucie…) */
+  proche(a, b) {
+    if (Math.abs(a.length - b.length) > 1) return false;
+    const d = Array.from({ length: a.length + 1 }, (_, i) => [i].concat(Array(b.length).fill(0)));
+    for (let j = 1; j <= b.length; j++) d[0][j] = j;
+    for (let i = 1; i <= a.length; i++) for (let j = 1; j <= b.length; j++) d[i][j] = Math.min(d[i - 1][j] + 1, d[i][j - 1] + 1, d[i - 1][j - 1] + (a[i - 1] === b[j - 1] ? 0 : 1));
+    return d[a.length][b.length] <= (Math.min(a.length, b.length) > 4 ? 2 : 1);
+  },
+  lotApercu() {
+    const l = Mandats.lotAnalyse(), ok = l.filter(x => x.p), ko = l.filter(x => !x.p);
+    const deja = x => x.p && Mandats.de(x.p).some(m => m.type === x.type);
+    $('#ml_res').innerHTML = !l.length ? '' : `<p><b>${ok.length}</b> reconnu(s) dans le fichier${ko.length ? `, <b style="color:var(--bord)">${ko.length} non trouvé(s)</b>` : ''}.</p>
+      ${ko.length ? `<div class="alert r">Non trouvés (vérifie l'orthographe ou crée la fiche) : ${ko.map(x => esc(x.n) + ' [' + x.type + ']').join(', ')}</div>` : ''}
+      <div style="max-height:26vh;overflow:auto">${ok.map(x => `<div>[${x.type}] ${esc(x.n)} → <b>${esc(P.full(x.p))}</b>${deja(x) ? ' <span class="tag">déjà désigné·e</span>' : ''}</div>`).join('')}</div>`;
+  },
+  lotValider(m) {
+    const l = Mandats.lotAnalyse().filter(x => x.p); if (!l.length) { UI.toast('Aucun nom reconnu', 'r'); return false; }
+    const debut = m.querySelector('#ml_d').value, precision = m.querySelector('#ml_p').value.trim(); let n = 0;
+    l.forEach(x => { if (Mandats.de(x.p).some(z => z.type === x.type)) return; x.p.mandats = x.p.mandats || []; x.p.mandats.push({ id: uid(), type: x.type, debut, fin: '', precision, par: ME.id }); P.touch(x.p); n++; });
+    log('Désignation en lot', plural(n, 'mandat')); UI.toast(plural(n, 'mandat enregistré', 'mandats enregistrés'), 'g'); App.route();
   },
   edit(pid, mid) {
     const p = P.get(pid), md = p.mandats.find(x => x.id === mid);

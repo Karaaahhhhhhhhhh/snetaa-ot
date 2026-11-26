@@ -230,3 +230,19 @@ td.b{font-weight:700}
 .jo-som{margin:.2rem 0 .4rem 1.1rem;padding:0;font-size:.9rem;line-height:1.45}
 .jo-mini{display:block;aspect-ratio:497/702;max-height:300px;overflow:hidden;background:#f4f5f8;border-bottom:1px solid var(--line)}
 .jo-mini img{height:100%;object-fit:cover;object-position:top}
+
+/* ---------- Réunions : réponses, pointage, vote et quorum ---------- */
+.reu-list{display:flex;flex-direction:column;gap:.4rem}
+.reu-p{display:flex;gap:.6rem;align-items:center;justify-content:space-between;flex-wrap:wrap;background:#fff;border:1px solid var(--line);border-radius:var(--r);padding:.5rem .7rem}
+.reu-n{min-width:200px;flex:1}
+.reu-tags{display:flex;flex-wrap:wrap;gap:.25rem;margin-top:.2rem;align-items:center}
+.reu-c{display:flex;flex-direction:column;gap:.2rem;align-items:flex-end}
+.reu-c .pill-select button{padding:.4rem .8rem;font-size:.88rem}
+.pill-select button.on.oui{background:var(--ok);border-color:var(--ok)}
+.pill-select button.on.non{background:var(--bord);border-color:var(--bord)}
+.pill-select button.on.att{background:var(--warn-l);border-color:var(--warn);color:var(--warn)}
+.tag.vote{background:#601080;color:#fff}
+.reu-vote{display:flex;justify-content:space-between;align-items:center;gap:1rem;background:#601080;color:#fff;border-radius:var(--r);padding:.7rem 1rem;margin:.6rem 0}
+.reu-vote .n{font-size:1.6rem;font-weight:700;white-space:nowrap}
+.reu-vote .q-ok{color:#b9f5cf;font-weight:700}.reu-vote .q-ko{color:#ffd0c4;font-weight:700}
+@media (max-width:600px){.reu-c{align-items:stretch;width:100%}.reu-c .pill-select{display:grid;grid-template-columns:repeat(3,1fr)}.reu-c .pill-select.reu-2{grid-template-columns:1fr 1fr}}
