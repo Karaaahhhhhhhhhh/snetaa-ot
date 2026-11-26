@@ -128,9 +128,10 @@ const Carte = {
   map: null, layer: null, focus: null, trajet: { a: null, b: null },
   couleur(e) { return e.service ? '#8c1c2c' : ['LP', 'SEP'].includes(e.type) ? '#e87400' : e.type === 'LPO' ? '#5f1a87' : '#1b2a4a'; },
   page() {
-    const sansGeo = D.etablissements.filter(e => !e.lat).length;
+    const sansGeo = Carte.aRevoir().length;
     $('#main').innerHTML = `<div class="pagehead"><div><h1>Cartographie</h1><div class="mut small">Lycées publics (pastille pleine) et privés (pastille creuse), rectorat et DSDEN. Taille = nombre de nos contacts.</div></div>
-      <div class="actions">${sansGeo ? `<button class="btn" onclick="Carte.localiser()">📍 Localiser ${sansGeo} lieu(x) (internet)</button>` : ''}<a class="btn sec" href="#/etabs">Liste</a></div></div>
+      <div class="actions"><button class="btn sec" onclick="Carte.relocaliser()" title="Recalcule la position de tous les lieux">📍 Revérifier toutes les positions</button><a class="btn sec" href="#/etabs">Liste</a></div></div>
+      <div id="geoinfo" class="alert small noprint" style="display:none"></div>
       <div class="card noprint" style="padding:.6rem">${Etabs.filtres('Carte.draw')}
       <div class="small"><span class="dot" style="background:#e87400"></span>LP / SEP <span class="dot" style="background:#5f1a87"></span>Lycée polyvalent <span class="dot" style="background:#1b2a4a"></span>LGT / LG / SGT <span class="dot" style="background:#8c1c2c"></span>Rectorat / DSDEN · <span class="dot" style="background:#fff;border:2px solid #1b2a4a"></span>privé</div></div>
       <div id="trajet" class="alert small noprint" style="display:none"></div>
@@ -148,15 +149,16 @@ const Carte = {
     Carte.map.on('baselayerchange', e => { try { localStorage.setItem('snetaa-fond', e.name); } catch (x) { } });
     Carte.layer = L.layerGroup().addTo(Carte.map);
     Carte.draw(); Carte.majTrajet();
+    if (sansGeo && navigator.onLine !== false) setTimeout(() => Carte.localiser(true), 300);
   },
   drawDeb: debounce(() => Carte.draw(), 250),
   draw() {
     if (!Carte.layer) return; Carte.layer.clearLayers();
     const cnt = Etabs.compte(); const pts = [];
-    Etabs.filtered().filter(e => e.lat).forEach(e => {
+    Etabs.filtered().filter(Geo.coordOk).forEach(e => {
       const c = cnt[e.uai] || {}; const n = (c.adh || 0) + (c.symp || 0); const col = Carte.couleur(e);
       const mk = L.circleMarker([e.lat, e.lon], { radius: e.service ? 9 : 5 + Math.min(12, Math.sqrt(n) * 2.5), color: col, weight: 2, fillColor: col, fillOpacity: e.statut === 'Privé' ? 0.08 : 0.75 });
-      mk.bindPopup(`<b>${esc(e.nom)}</b><br>${esc(TYPES_ETAB[e.type] || e.type || '')} — ${esc(e.statut || '')}<br>${esc([e.adresse, e.cp, e.ville].filter(Boolean).join(', '))}${e.tel ? '<br>☎ ' + esc(e.tel) : ''}<br>${Mandats.s1(e.uai).length ? 'S1 : <b>' + Mandats.s1(e.uai).map(x => esc(P.full(x.p))).join(', ') + '</b><br>' : ''}${c.adh ? `<b>${c.adh}</b> adhérent(s) dont ${c.aj} à jour<br>` : ''}${c.symp ? `<b>${c.symp}</b> sympathisant(s)<br>` : ''}
+      mk.bindPopup(`<b>${esc(e.nom)}</b>${e.geoApprox ? '<br><span class="small mut">position approximative (centre de la commune)</span>' : ''}<br>${esc(TYPES_ETAB[e.type] || e.type || '')} — ${esc(e.statut || '')}<br>${esc([e.adresse, e.cp, e.ville].filter(Boolean).join(', '))}${e.tel ? '<br>☎ ' + esc(e.tel) : ''}<br>${Mandats.s1(e.uai).length ? 'S1 : <b>' + Mandats.s1(e.uai).map(x => esc(P.full(x.p))).join(', ') + '</b><br>' : ''}${c.adh ? `<b>${c.adh}</b> adhérent(s) dont ${c.aj} à jour<br>` : ''}${c.symp ? `<b>${c.symp}</b> sympathisant(s)<br>` : ''}
         <div style="margin-top:6px;display:flex;gap:4px;flex-wrap:wrap"><button class="btn sm sec" onclick="Etabs.voir('${esc(e.uai)}')">Fiche</button><button class="btn sm sec" onclick="Carte.setTrajet('a','${esc(e.uai)}')">Départ</button><button class="btn sm sec" onclick="Carte.setTrajet('b','${esc(e.uai)}')">Arrivée</button></div>`);
       mk.addTo(Carte.layer); pts.push([e.lat, e.lon]);
       if (Carte.focus === e.uai) { setTimeout(() => { Carte.map.setView([e.lat, e.lon], 13); mk.openPopup(); }, 100); }
@@ -164,17 +166,33 @@ const Carte = {
     if (pts.length && !Carte.focus) Carte.map.fitBounds(pts, { padding: [20, 20], maxZoom: 12 });
     Carte.focus = null;
   },
-  async localiser() {
-    const l = D.etablissements.filter(e => !e.lat); let ok = 0, ko = 0;
-    UI.toast('Localisation de ' + l.length + ' lieux…');
+  /* Lieux à (re)localiser : sans coordonnées, hors de leur département, ou jamais vérifiés avec la méthode stricte */
+  aRevoir() { return D.etablissements.filter(e => !Geo.coordOk(e) || (e.geoV || 0) < 2); },
+  async localiser(silencieux) {
+    if (Carte.enCours) return; Carte.enCours = true;
+    const l = Carte.aRevoir(); let ok = 0, ko = 0, dep = 0; const ratees = [];
+    if (!l.length) { Carte.enCours = false; return; }
+    const info = t => { const b = $('#geoinfo'); if (b) { b.style.display = ''; b.innerHTML = t; } };
+    info(`📍 Vérification de la localisation de ${l.length} lieu(x)…`);
     for (const e of l) {
-      try { const g = await Geo.geocode([e.adresse, e.cp, e.ville].filter(Boolean).join(' ') || e.nom + ' ' + e.ville); e.lat = g.lat; e.lon = g.lon; ok++; }
-      catch (err) { try { const g = await Geo.geocode(e.ville + ' ' + (e.cp || '')); e.lat = g.lat; e.lon = g.lon; e.geoApprox = true; ok++; } catch (e2) { ko++; } }
-      if ((ok + ko) % 20 === 0) UI.toast(`${ok + ko} / ${l.length}…`);
-      await new Promise(r => setTimeout(r, 60));
+      const avant = Geo.coordOk(e) ? [e.lat, e.lon] : null;
+      try {
+        const g = await Geo.etab(e);
+        if (avant && Geo.vol({ lat: avant[0], lon: avant[1] }, g) > 2) dep++;
+        e.lat = g.lat; e.lon = g.lon; e.geoApprox = !!g.approx; e.geoV = 2; ok++;
+      } catch (err) {
+        if (/indisponible/.test(err.message)) { info('⚠ Service d\'adresses injoignable (connexion internet ?) : réessaie plus tard.'); break; }
+        if (!avant) { delete e.lat; delete e.lon; } e.geoV = 2; ko++; ratees.push(e.nom + ' (' + (e.ville || '?') + ')');
+      }
+      if ((ok + ko) % 10 === 0) info(`📍 Vérification des localisations : ${ok + ko} / ${l.length}…`);
+      await new Promise(r => setTimeout(r, 40));
     }
-    save(); UI.toast(`${ok} lieux localisés${ko ? ', ' + ko + ' introuvables' : ''}`, ko ? 'r' : 'g'); App.route();
+    save(); Carte.enCours = false;
+    info(`✔ ${plural(ok, 'lieu vérifié', 'lieux vérifiés')}${dep ? `, dont <b>${plural(dep, 'position corrigée', 'positions corrigées')}</b>` : ''}${ko ? `. <b>${ko}</b> introuvable(s) dans leur département : ${esc(ratees.slice(0, 8).join(', '))}${ratees.length > 8 ? '…' : ''} — complète l'adresse dans la fiche de l'établissement.` : '.'}`);
+    log('Localisation des établissements', `${ok} vérifiés, ${dep} corrigés, ${ko} introuvables`);
+    if (Carte.layer) Carte.draw();
   },
+  async relocaliser() { if (!await UI.confirm('Revérifier la position de tous les établissements et services ? (environ une minute, connexion internet nécessaire)', 'Revérifier')) return; D.etablissements.forEach(e => { e.geoV = 0; }); Carte.localiser(); },
   setTrajet(k, uai) { Carte.trajet[k] = uai; Carte.majTrajet(); },
   async majTrajet() {
     const box = $('#trajet'); if (!box) return; const t = Carte.trajet;
