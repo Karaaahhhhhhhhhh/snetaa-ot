@@ -100,13 +100,15 @@ const mine=()=>all().filter(f=>f.userId===ME.id);
 const get=id=>all().find(f=>f.id===id);
 function newDep(date=""){return{id:uid(),date,motif:"",motifAutre:"",mode:"points",pts:[],retour:null,legs:[],aller:"",allerKm:0,retourKm:0,passager:false,conducteur:"",peageA:0,peageR:0,parkA:0,parkR:0,repas:[],auto:true,reunionId:"",note:""}}
 function newFiche(mois){const d=mois?new Date(+mois.slice(0,4),+mois.slice(5,7)-1,1):new Date();const m=d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0");
-  return{id:"f"+uid(),userId:ME.id,decl:ident(),mois:m,titre:MOIS[d.getMonth()]+" "+d.getFullYear(),dateDecl:today(),statut:"brouillon",envoyeLe:"",commentaire:"",payeeLe:"",hist:[],deps:[],autres:{postal:0,internet:0,divers:0,diversTxt:""},pieces:[],createdAt:Date.now(),maj:Date.now()}}
+  return{id:"f"+uid(),userId:ME.id,decl:ident(),mois:m,titre:"Fiche du "+fdate(today()),dateDecl:today(),statut:"brouillon",envoyeLe:"",commentaire:"",payeeLe:"",hist:[],deps:[],autres:{postal:0,internet:0,divers:0,diversTxt:""},pieces:[],createdAt:Date.now(),maj:Date.now()}}
 const st={tab:"deps",cur:null,jobs:[],cutMode:"auto",pendingDep:null,tf:{m:"",p:"",s:""}};
 const cur=()=>{const f=get(st.cur);return f&&f.userId===ME.id?f:null};
 let _t=null;
 function touch(f){if(f){f.maj=Date.now();f.decl=f.decl&&f.statut!=="brouillon"?f.decl:ident(D.users.find(u=>u.id===f.userId)||ME)}clearTimeout(_t);_t=setTimeout(()=>save(),400)}
 const saveCur=()=>touch(cur());
-function ficheMois(mois,creer){let f=mine().find(x=>x.mois===mois&&x.statut==="brouillon");if(!f&&creer){f=newFiche(mois);all().push(f);touch(f)}return f}
+function periode(f){const ds=(f.deps||[]).map(d=>d.date).filter(Boolean).sort();if(!ds.length)return "";return ds[0]===ds[ds.length-1]?"le "+fdate(ds[0]):"du "+fdate(ds[0])+" au "+fdate(ds[ds.length-1])}
+function ficheMois(mois,creer){ // fiche en cours = brouillon ouvert (ou le plus récent), quel que soit le mois : une fiche regroupe tous les frais depuis la précédente
+  let f=(cur()&&cur().statut==="brouillon"?cur():null)||mine().filter(x=>x.statut==="brouillon").sort((a,b)=>(b.createdAt||0)-(a.createdAt||0))[0];if(!f&&creer){f=newFiche(mois);all().push(f);touch(f)}return f}
 
 /* ============ Distances ============ */
 function ptKey(p,u=ME){if(!p)return "";if(p.k==="dom")return "dom:"+u.id;if(p.k==="etab")return "etab:"+p.ref;if(p.k==="lieu")return "lieu:"+p.ref;return "adr:"+norm(p.adr||p.label||"")}
@@ -568,7 +570,7 @@ function renderTabs(){
 function renderView(){
   const v=$("#frView");if(!v)return;
   renderFichePick();renderTabs();
-  if(!cur()&&!["reg","tous","commun"].includes(st.tab)){v.innerHTML=`${rappelHtml()}<div class="fr-empty"><b>Aucune fiche</b>Crée ta première fiche de frais (une fiche par mois).<div style="margin-top:12px"><button class="btn" data-act="newFiche">Créer une fiche</button></div></div>`;return}
+  if(!cur()&&!["reg","tous","commun"].includes(st.tab)){v.innerHTML=`${rappelHtml()}<div class="fr-empty"><b>Aucune fiche</b>Crée une fiche : elle regroupe tous tes déplacements et dépenses depuis ta dernière fiche, puis tu l'envoies quand tout est justifié.<div style="margin-top:12px"><button class="btn" data-act="newFiche">Créer une fiche</button></div></div>`;return}
   v.innerHTML=st.tab==="deps"?viewDeps():st.tab==="pieces"?viewPieces():st.tab==="recap"?viewRecap():st.tab==="tous"?viewTous():st.tab==="commun"?viewCommun():viewReg();
   if(st.tab==="reg")initSigPad();
   if(st.tab==="deps"){const f=cur();f&&f.deps.forEach(d=>{if(d.mode!=="hab"&&(d.legs||[]).some(l=>l.km==null&&!l.err))autoCalc(f,d)})}
@@ -672,7 +674,7 @@ function viewDeps(){
   ${lk?`<div class="fr-notice info">Fiche ${STATUTS[f.statut][0].toLowerCase()} : elle n'est plus modifiable.${f.statut==="envoyee"?` <button class="btn sm" data-act="unsend">Repasser en brouillon</button>`:""}</div>`:""}
   ${summaryBar(f,c)}
   <fieldset class="fr-fs" ${lk?"disabled":""}>
-  <div class="section-head"><div><div class="eyebrow">Fiche ${esc(f.titre)}</div><h2>Déplacements</h2></div><button class="btn" data-act="addDep">+ Ajouter un déplacement</button></div>
+  <div class="section-head"><div><div class="eyebrow">${esc(f.titre)}${periode(f)?" · "+esc(periode(f)):""}</div><h2>Déplacements</h2></div><button class="btn" data-act="addDep">+ Ajouter un déplacement</button></div>
   <div class="stack">${cards||`<div class="fr-empty"><b>Aucun déplacement pour l'instant</b>Ajoute un déplacement, déclare une réunion, ou numérise tes justificatifs : les déplacements sont créés d'après leurs dates.</div>`}</div>
   <div class="section-head" style="margin-top:26px"><h2>Autres frais</h2><span class="dep-total num" data-total="autres">${eur(c.autres)}</span></div>
   <article class="card fr-dep"><div class="fr-grid">
@@ -705,7 +707,7 @@ function viewPieces(){
   const au=f.pieces.filter(p=>p.depId==="autres");if(au.length)groups.push(["Autres frais","",au]);
   const un=f.pieces.filter(p=>!isAssigned(p,f));
   const byRef=(a,b)=>parseInt(ref[a.id].slice(1))-parseInt(ref[b.id].slice(1));
-  return `<div class="section-head"><div><div class="eyebrow">Fiche ${esc(f.titre)}</div><h2>Justificatifs</h2></div></div>
+  return `<div class="section-head"><div><div class="eyebrow">${esc(f.titre)}${periode(f)?" · "+esc(periode(f)):""}</div><h2>Justificatifs</h2></div></div>
   ${locked(f)?`<div class="fr-notice info">Fiche ${STATUTS[f.statut][0].toLowerCase()} : ajout de justificatifs fermé.</div>`:`<div class="drop" id="drop">
     <div class="txt"><b>Numériser des justificatifs</b><div class="small mut">Photo ou scan d'un ou plusieurs tickets (péage, parking, restaurant…), convocations en PDF ou en image. Chaque pièce est détourée, redressée dans le sens de lecture, classée, datée puis affectée au déplacement du même jour. La lecture se fait sur ton appareil : rien n'est envoyé.</div></div>
     <div class="row"><button class="btn" data-act="cam">${ICON.cam}Prendre une photo</button><button class="btn sec" data-act="pick">${ICON.up}Importer des fichiers</button></div>
@@ -747,7 +749,7 @@ function mailText(f){
   const L=[];const nm=[i.prenom,i.nom].filter(Boolean).join(" ");
   L.push(`Objet : [SNETAA-FO] Déclaration de frais – ${f.titre} – ${nm}`,"");
   L.push(`Bonjour${tr.nom?" "+tr.nom.split(" ")[0]:""},`,"");
-  L.push(`Tu trouveras ci-joint ma fiche de remboursement de frais pour ${f.titre}, avec ${list.length} justificatif${list.length>1?"s":""} (fichier PDF).`,"");
+  L.push(`Tu trouveras ci-joint ma fiche de remboursement de frais (${f.titre}${periode(f)?", déplacements "+periode(f):""}), avec ${list.length} justificatif${list.length>1?"s":""} (fichier PDF).`,"");
   L.push("Récapitulatif :");
   sortedDeps(f).forEach((d,k)=>{const dc=depCalc(d,f);const parts=[];
     if(dc.km)parts.push(`${kmTxt(dc.km)} = ${eur(dc.ik)}`);if(dc.peages)parts.push(`péages ${eur(dc.peages)}`);if(dc.parking)parts.push(`parking ${eur(dc.parking)}`);if(dc.repas)parts.push(`repas ${eur(dc.repas)}`);
@@ -771,7 +773,7 @@ function viewRecap(){
   const actions=f.statut==="brouillon"||f.statut==="corriger"
     ?`<button class="btn" data-act="askSend">Envoyer à la trésorière</button><div data-confirm="send"></div>`
     :f.statut==="envoyee"?`<button class="btn sm ghost" data-act="unsend">Repasser en brouillon</button>`:"";
-  return `<div class="section-head"><div><div class="eyebrow">Fiche ${esc(f.titre)} · déclarée le ${fdate(f.dateDecl)}</div><h2>Récapitulatif ${statutChip(f)}</h2></div><div class="row">${actions}</div></div>
+  return `<div class="section-head"><div><div class="eyebrow">${esc(f.titre)}${periode(f)?" · "+esc(periode(f)):""} · déclarée le ${fdate(f.dateDecl)}</div><h2>Récapitulatif ${statutChip(f)}</h2></div><div class="row">${actions}</div></div>
   ${f.commentaire&&f.statut!=="brouillon"?`<div class="fr-notice ${f.statut==="corriger"?"":"info"}"><b>Trésorerie :</b> ${esc(f.commentaire)}</div>`:""}
   ${f.statut==="envoyee"&&!admin?`<div class="fr-notice info">Ta fiche part à la trésorière avec ton prochain envoi de retour : <button class="btn sm" data-act="retour">Envoyer mon retour maintenant</button></div>`:""}
   <div class="two" style="margin-bottom:16px">
@@ -827,7 +829,7 @@ function viewReg(){
       <label class="row small" style="gap:8px"><input type="checkbox" data-pro="autoDep" ${pr.autoDep?"checked":""}> Créer automatiquement un déplacement pour les justificatifs datés d'un jour sans déplacement</label></div>
     <div class="card pad stack"><div class="eyebrow">Signature (apposée sur le PDF)</div>
       <canvas class="sig" id="sig" width="840" height="280"></canvas>
-      <div class="row"><button class="btn sm sec" data-act="sigClear">Effacer</button><span class="small mut" id="sigMsg">${pr.signature?"Signature enregistrée.":"Signe avec le doigt ou la souris."}</span></div></div>
+      <div class="row"><button class="btn sm sec" data-act="sigClear">Effacer</button><button class="btn sm sec" data-act="sigImport">Importer une signature (image)</button><span class="small mut" id="sigMsg">${pr.signature?"Signature enregistrée.":"Signe avec le doigt ou la souris."}</span></div></div>
    </div>
    <div class="stack">
     <div class="card pad stack"><div class="eyebrow">Mes distances enregistrées (${dist.length})</div>
@@ -886,7 +888,7 @@ function viewTous(){
   return `<div class="section-head"><div><div class="eyebrow">Déclarations envoyées</div><h2>Toutes les déclarations</h2></div><button class="btn sm sec" data-act="exportTous">${ICON.dl}Tableau Excel</button></div>
   <div class="card pad row" style="gap:12px">
     <label class="f"><span>Membre</span><select data-tf="m"><option value="">Tous</option>${membres.map(([id,i])=>`<option value="${id}" ${t.m===id?"selected":""}>${esc(i.nom+" "+i.prenom)}</option>`).join("")}</select></label>
-    <label class="f"><span>Période</span><select data-tf="p"><option value="">Toutes</option>${mois.map(m=>`<option value="${m}" ${t.p===m?"selected":""}>${MOIS[+m.slice(5,7)-1]} ${m.slice(0,4)}</option>`).join("")}</select></label>
+    <label class="f"><span>Créée en</span><select data-tf="p"><option value="">Tous les mois</option>${mois.map(m=>`<option value="${m}" ${t.p===m?"selected":""}>${MOIS[+m.slice(5,7)-1]} ${m.slice(0,4)}</option>`).join("")}</select></label>
     <label class="f"><span>Statut</span><select data-tf="s"><option value="">Tous</option>${Object.entries(STATUTS).filter(([k])=>k!=="brouillon").map(([k,v])=>`<option value="${k}" ${t.s===k?"selected":""}>${v[0]}</option>`).join("")}</select></label>
     <div class="f"><span class="small mut">${plural(l.length,"fiche")} · total</span><b class="num">${eur(tot)}</b></div></div>
   <div class="scroll-x" style="margin-top:12px"><table class="recap-table"><thead><tr><th>Membre</th><th>Période</th><th class="r">Montant</th><th>Statut</th><th>Envoyée</th><th></th></tr></thead><tbody>
@@ -1074,6 +1076,9 @@ document.addEventListener("click",async e=>{
     case "mailto":{const tr=tresoriere(),t=mailText(f);const lines=t.split("\n");const subj=lines[0].replace(/^Objet : /,"");const body=lines.slice(2).join("\n");location.href="mailto:"+encodeURIComponent(tr.email||"")+"?subject="+encodeURIComponent(subj)+"&body="+encodeURIComponent(body);break}
     case "share":makePdf(f,"share");break;
     case "sigClear":pr.signature="";touch(null);renderView();break;
+    case "sigImport":{pickFile("image/*").then(async file=>{if(!file)return;const url=await blobToDataURL(file);const im=await loadImg(url);
+      const k=Math.min(1,840/im.naturalWidth),c=document.createElement("canvas");c.width=Math.round(im.naturalWidth*k);c.height=Math.round(im.naturalHeight*k);const g=c.getContext("2d");g.fillStyle="#fff";g.fillRect(0,0,c.width,c.height);g.drawImage(im,0,0,c.width,c.height);
+      pr.signature=c.toDataURL("image/jpeg",.85);touch(null);renderView();toast("Signature importée : elle sera apposée sur tes PDF")});break}
     case "voirFiche":voirFiche(id);break;
     case "exportTous":exportTous();break;
     case "addBar":if(can("frais.regler")){const l=conf().baremes;const last=l.slice().sort((x,y)=>(y.depuis||"").localeCompare(x.depuis||""))[0];l.push({id:"b"+uid(),depuis:today(),km:last.km,repasMax:last.repasMax});touch(null);renderView()}break;
@@ -1405,7 +1410,7 @@ async function makePdf(f,how,o={}){
     y+=20;doc.setDrawColor(...line);doc.line(M,y,W-M,y);y+=6;
     const kv=(k,v,x,yy)=>{T(k,x,yy,{s:7.5,c:mute});T(v||"—",x,yy+4.5,{b:1,s:10})};
     kv("NOM",(p.nom||"").toUpperCase(),M,y);kv("Prénom",p.prenom,M+48,y);kv("Fonction",p.fonction,M+96,y);kv("Date de déclaration",fdate(f.dateDecl),M+150,y);
-    y+=12;kv("Période",f.titre,M,y);kv("Barème",bareTxtCourt(bareme(f.deps.length?sortedDeps(f)[0].date:f.dateDecl)),M+48,y);kv("Justificatifs joints",String(list.length),M+150,y);
+    y+=12;kv("Période",periode(f)||f.titre,M,y);kv("Barème",bareTxtCourt(bareme(f.deps.length?sortedDeps(f)[0].date:f.dateDecl)),M+48,y);kv("Justificatifs joints",String(list.length),M+150,y);
     if(f.statut!=="brouillon"){y+=11;kv("Statut",STATUTS[f.statut][0]+(f.envoyeLe?" · envoyée le "+fdate(f.envoyeLe):"")+(f.payeeLe?" · payée le "+fdate(f.payeeLe):""),M,y)}
     y+=13;
     // Tableau déplacements
