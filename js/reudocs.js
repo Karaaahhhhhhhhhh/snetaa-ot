@@ -323,8 +323,10 @@ const ReuDocs = {
       + 'Lieu : ' + [L.nom, L.l1, L.l2].filter(Boolean).join(', ') + '\n\n'
       + 'Tu trouveras en pièce jointe ta convocation et l’ordre du jour' + (art !== 'aucun' ? ', ainsi que le formulaire « Exercice du droit syndical » pré-rempli : signe-le et dépose-le au secrétariat de ton établissement avec la convocation, ' + c.delaiASA : '') + '.\n\n'
       + 'Merci de me confirmer ta présence (ou ton absence) en répondant à ce mail.\n\n'
+      + 'Mode d’emploi (autorisation d’absence et frais de déplacement) : ' + ReuDocs.urlPublique('docs/Mode_emploi_frais_convocations.pdf') + '\n\n'
       + 'Bien syndicalement,\n\n' + ((D.meta.syndicat || {}).signature || c.signataireNom);
   },
+  urlPublique(chemin) { const b = /^https:/.test(location.href) ? location.href.replace(/[#?].*$/, '').replace(/[^/]*$/, '') : 'https://karaaahhhhhhhhhh.github.io/snetaa-ot/'; return b + chemin; },
   sujetInvite(r) { return '[SNETAA-FO] Invitation – ' + ReuDocs.instance(r) + ' du ' + ReuDocs.dateLongue(r.date, false); },
   corpsInvite(r, n) {
     const L = ReuDocs.lieuDe(r);

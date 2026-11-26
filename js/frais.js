@@ -545,7 +545,7 @@ function page(){
   if(!tabsList().some(t=>t[0]===st.tab))st.tab="deps";
   modals();
   $("#main").innerHTML=`<div class="fr" id="frRoot">
-    <div class="fr-top"><div class="fr-brand"><h1>Frais de déplacement</h1><div class="small mut" id="frWho"></div></div>
+    <div class="fr-top"><div class="fr-brand"><h1>Frais de déplacement</h1><div class="small mut" id="frWho"></div><a class="small" href="docs/Mode_emploi_frais_convocations.pdf" target="_blank" rel="noopener">📘 Mode d'emploi (PDF)</a></div>
       <div class="fr-pick"><select id="ficheSel" aria-label="Fiche de frais"></select><button class="btn sm" data-act="newFiche" title="Nouvelle fiche">+ Fiche</button><button class="btn sm sec" data-qr="open" title="Passer les photos des justificatifs d'un appareil à l'autre">⇄ Photos</button></div></div>
     <nav class="fr-tabs" id="frTabs"></nav>
     <div id="frView" aria-live="polite"></div>
