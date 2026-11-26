@@ -56,10 +56,19 @@ const ReuDocs = {
     const inst = ReuDocs.instance(r);
     if (/bureau acad[ée]mique [ée]largi/i.test(inst)) return 'Membre des instances académiques du SNETAA-FO, tu es invité(e) à participer au Bureau académique élargi du SNETAA-FO.';
     if (/bureau acad[ée]mique/i.test(inst)) return 'Membre du bureau académique du SNETAA-FO, tu es convoqué(e) à la réunion du Bureau académique.';
+    if (/assembl[ée]e g[ée]n[ée]rale/i.test(inst)) return 'Adhérent(e) du SNETAA-FO, tu es invité(e) à l’assemblée générale des adhérents de l’académie d’Orléans-Tours.';
     if (/conseil syndical/i.test(inst)) return 'Membre du conseil syndical académique du SNETAA-FO, tu es convoqué(e) à sa prochaine réunion.';
     return 'Tu es invité(e) à participer à la réunion « ' + inst + ' » du SNETAA-FO.';
   },
-  pointsODJ(r) { const d = r.docs || {}; return (d.ordre && d.ordre.length ? d.ordre : ['Actualité nationale', 'Actualité académique – instances', 'Questions diverses']).filter(x => String(x).trim()); },
+  pointsODJ(r) {
+    const d = r.docs || {}; let l = (d.ordre && d.ordre.length ? d.ordre : String(r.odj || '').split('\n').map(x => x.replace(/^\s*(\d+[.)-]|[-•*])\s*/, '').trim()).filter(Boolean));
+    if (!l.length) l = ['Actualité nationale', 'Actualité académique – instances', 'Questions diverses'];
+    const inv = ReuDocs.invites(r);
+    if (inv.length && !l.some(x => /snetaa national|national/i.test(x))) l = ['Intervention du SNETAA national (' + inv.map(i => i.prenom + ' ' + String(i.nom).toUpperCase() + (i.fonction ? ', ' + i.fonction.toLowerCase() : '')).join(' ; ') + ') : point sur l’actualité nationale'].concat(l);
+    return l.filter(x => String(x).trim());
+  },
+  nationaux() { const m = ReuDocs.conf(); return (m.nationaux = m.nationaux || []); },
+  invites(r) { return ((r.docs && r.docs.invites) || []).map(id => ReuDocs.nationaux().find(n => n.id === id)).filter(Boolean); },
 
   /* ---------- Bibliothèques et polices ---------- */
   async script(src, test) { if (test()) return; await new Promise((ok, ko) => { const s = document.createElement('script'); s.src = src; s.onload = ok; s.onerror = () => ko(new Error('Impossible de charger ' + src + ' (connexion ?)')); document.head.appendChild(s); }); },
@@ -258,4 +267,177 @@ const ReuDocs = {
     out.setTitle('Convocation SNETAA-FO'); out.setAuthor('SNETAA-FO Orléans-Tours');
     return out.save();
   }
+,
+  /* ---------- Invitation d'un membre du SNETAA national ---------- */
+  async pdfInvitation(r, n) {
+    const doc = await ReuDocs.nouveauDoc(), C = ReuDocs.C;
+    ReuDocs.entete(doc, 'Invitation', ReuDocs.instance(r), r);
+    ReuDocs.expediteur(doc, 50); ReuDocs.dateLettre(doc, 50, r);
+    let y = 70;
+    doc.setFont('Carlito', 'normal'); doc.setFontSize(8.5); ReuDocs.col(doc, C.mut); doc.text('À l’attention de', 120, y);
+    doc.setFont('Lora', 'bold'); doc.setFontSize(13); ReuDocs.col(doc, C.navy); doc.text(n.prenom + ' ' + String(n.nom).toUpperCase(), 120, y + 6);
+    doc.setFont('Carlito', 'normal'); doc.setFontSize(9.5); ReuDocs.col(doc, C.txt); doc.text(doc.splitTextToSize((n.fonction || 'Membre du secrétariat national') + ' – SNETAA-FO', 74), 120, y + 11.2);
+    y += 26;
+    doc.setFont('Carlito', 'normal'); doc.setFontSize(11.5); ReuDocs.col(doc, C.txt);
+    const txt = (r.docs && r.docs.texteInvite) || ('Cher camarade,\n\nNous avons le plaisir de t’inviter à notre ' + ReuDocs.instance(r) + ' afin que tu nous présentes un point sur l’actualité nationale et que tu puisses échanger avec nos militants et nos adhérents. Tu trouveras l’ordre du jour ci-joint.');
+    txt.split('\n').forEach(par => { const l = doc.splitTextToSize(ReuDocs.nb(par), 178); doc.text(l, 16, y); y += Math.max(1, l.length) * 5.3 + (par ? 1.5 : 0); });
+    y += 3; doc.text('Cette réunion se déroulera :', 16, y); y += 6;
+    y = ReuDocs.carteQuand(doc, y, r, true) + 11;
+    doc.setFont('Lora', 'italic'); doc.setFontSize(12); ReuDocs.col(doc, C.bord);
+    doc.text('Merci de nous confirmer ta venue et tes horaires d’arrivée.', 105, y, { align: 'center' }); y += 12;
+    ReuDocs.signature(doc, Math.max(y, 214), r);
+    ReuDocs.pied(doc);
+    return doc;
+  },
+
+  /* ---------- Destinataire : identité, corps, établissement ---------- */
+  CORPS: { PLP: 'PLP', PLP_STAG: 'PLP stagiaire', CERT: 'Professeur certifié', AGREG: 'Professeur agrégé', CONTR: 'Professeur contractuel', PE: 'Professeur des écoles', DOC: 'Professeur documentaliste', CPE: 'CPE', AED: 'AED', AESH: 'AESH', PSYEN: 'Psychologue de l’Éducation nationale', DDFPT: 'DDFPT' },
+  personne(x) {
+    const u = x.uid && D.users.find(y => y.id === x.uid), p = (x.pid && P.get(x.pid)) || (u && u.pid && P.get(u.pid));
+    if (p) {
+      const a = (p.affectations || []).find(a => a.principal) || (p.affectations || [])[0] || {}, e = a.uai && D.etablissements.find(y => y.uai === a.uai);
+      const nomE = a.nom || (e && e.nom) || '', ville = a.ville || (e && e.ville) || '';
+      return { nom: String(p.nom || '').toUpperCase(), prenom: p.prenom || '', nomComplet: ((p.prenom || '') + ' ' + String(p.nom || '').toUpperCase()).trim(), corps: ReuDocs.CORPS[p.statut] || STATUT(p.statut)[1] || '',
+        etab: [nomE, ville].filter(Boolean).join(', '), etabLong: [nomE, ville.toUpperCase()].filter(Boolean).join(' – '), email: p.email || '', tel: p.telPortable || '' };
+    }
+    if (u) return { nom: String(u.nom || '').toUpperCase(), prenom: u.prenom || '', nomComplet: ((u.prenom || '') + ' ' + String(u.nom || '').toUpperCase()).trim(), corps: '', etab: '', etabLong: '', email: u.email || '', tel: u.tel || '' };
+    const t = String(x.nom || '').trim().split(/\s+/), nom = t.filter(w => w === w.toUpperCase() && /[A-Z]/.test(w)).join(' ') || t.slice(-1).join(' '), prenom = t.filter(w => !nom.split(' ').includes(w)).join(' ');
+    return { nom: nom.toUpperCase(), prenom, nomComplet: String(x.nom || ''), corps: '', etab: x.etab || '', etabLong: x.etab || '', email: x.email || '', tel: '' };
+  },
+  fichier(r, p, quoi) { return (quoi + '_' + (p.nom || 'X') + '_' + (p.prenom || '') + '_' + r.date).replace(/[^\w\-àâäéèêëîïôöùûüç]+/gi, '_').replace(/_+/g, '_').replace(/_$/, '') + '.pdf'; },
+  async dossier(r, x, odjBytes) { // convocation + ordre du jour + formulaire pré-rempli, en un seul PDF
+    const p = ReuDocs.personne(x), art = ((r.docs || {}).asa || {}).article || '13';
+    const l = [await ReuDocs.pdfConvocation(r, p)];
+    if (odjBytes) { const PL = await ReuDocs.pdflib(); l.push(await PL.PDFDocument.load(odjBytes)); } else l.push(await ReuDocs.pdfODJ(r));
+    if (art !== 'aucun') l.push(await ReuDocs.pdfASA(r, p));
+    return ReuDocs.fusion(l);
+  },
+  telecharger(nom, bytes) { download(nom, new Blob([bytes], { type: 'application/pdf' })); },
+
+  /* ---------- Textes des mails (ouverts dans Thunderbird) ---------- */
+  sujet(r) { return '[SNETAA-FO] Convocation – ' + ReuDocs.instance(r) + ' du ' + ReuDocs.dateLongue(r.date, false); },
+  corpsMail(r, p) {
+    const L = ReuDocs.lieuDe(r), c = ReuDocs.conf(), art = ((r.docs || {}).asa || {}).article || '13';
+    return 'Bonjour ' + (p.prenom || '') + ',\n\n' + ReuDocs.introConv(r) + '\n\n'
+      + 'Date : ' + ReuDocs.quand(r) + (ReuDocs.horaire(r) ? ', ' + ReuDocs.horaire(r) : '') + '\n'
+      + 'Lieu : ' + [L.nom, L.l1, L.l2].filter(Boolean).join(', ') + '\n\n'
+      + 'Tu trouveras en pièce jointe ta convocation et l’ordre du jour' + (art !== 'aucun' ? ', ainsi que le formulaire « Exercice du droit syndical » pré-rempli : signe-le et dépose-le au secrétariat de ton établissement avec la convocation, ' + c.delaiASA : '') + '.\n\n'
+      + 'Merci de me confirmer ta présence (ou ton absence) en répondant à ce mail.\n\n'
+      + 'Bien syndicalement,\n\n' + ((D.meta.syndicat || {}).signature || c.signataireNom);
+  },
+  sujetInvite(r) { return '[SNETAA-FO] Invitation – ' + ReuDocs.instance(r) + ' du ' + ReuDocs.dateLongue(r.date, false); },
+  corpsInvite(r, n) {
+    const L = ReuDocs.lieuDe(r);
+    return 'Bonjour ' + n.prenom + ',\n\nNous serions heureux de t’accueillir à notre ' + ReuDocs.instance(r) + ' pour un point sur l’actualité nationale du SNETAA.\n\n'
+      + 'Date : ' + ReuDocs.quand(r) + (ReuDocs.horaire(r) ? ', ' + ReuDocs.horaire(r) : '') + '\nLieu : ' + [L.nom, L.l1, L.l2].filter(Boolean).join(', ') + '\n\n'
+      + 'Tu trouveras en pièce jointe la lettre d’invitation et l’ordre du jour. Peux-tu nous confirmer ta venue et ton horaire d’arrivée ?\n\nBien syndicalement,\n\n' + ReuDocs.conf().signataireNom + '\nSecrétaire académique SNETAA Orléans-Tours\n' + ReuDocs.conf().mail;
+  },
+
+  /* ---------- Bloc « Convocation et documents » de la fiche réunion ---------- */
+  ASA: [['13', 'Art. 13.2 – autorisation spéciale d’absence (FO, 20 j/an)'], ['13.1', 'Art. 13.1 – autorisation spéciale d’absence (10 j/an)'], ['16', 'Art. 16 – crédit d’heures (motif à préciser)'], ['conge', 'Congé pour formation syndicale (stage)'], ['aucun', 'Pas de formulaire']],
+  docs(r) { r.docs = r.docs || {}; r.docs.asa = r.docs.asa || {}; r.docs.invites = r.docs.invites || []; return r.docs; },
+  carte(r) {
+    const d = ReuDocs.docs(r), a = d.asa, art = a.article === '13' && a.sous === '13.1' ? '13.1' : (a.article || '13'), id = r.id, N = ReuDocs.nationaux();
+    const nb = r.participants.length, conv = r.participants.filter(x => x.convoque).length;
+    const set = (k, v) => `ReuDocs.set('${id}','${k}',${v})`;
+    return `<div class="card noprint"><h3 style="margin-top:0">📨 Convocation et documents</h3>
+      <div class="frow"><div class="f"><label>Nom de l'instance sur les documents</label><input value="${esc(d.instance || '')}" placeholder="${esc(r.titre || r.type || '')}" onchange="${set('instance', 'this.value.trim()')}"></div>
+        <div class="f"><label>Date des documents</label><input type="date" value="${esc(d.dateDoc || '')}" onchange="${set('dateDoc', 'this.value')}"></div>
+        <div class="f"><label>Autorisation d'absence jointe</label><select onchange="ReuDocs.setAsa('${id}',this.value)">${UI.opts(ReuDocs.ASA, art)}</select></div></div>
+      ${art === '16' ? `<div class="f"><label>Motif (article 16)</label><input value="${esc(a.motif || '')}" placeholder="${esc(ReuDocs.instance(r))}" onchange="ReuDocs.docs(Reu.get('${id}')).asa.motif=this.value;save()"></div>` : ''}
+      ${art === 'conge' ? `<div class="frow"><div class="f"><label>Lieu du stage</label><input value="${esc(a.lieuStage || '')}" onchange="ReuDocs.docs(Reu.get('${id}')).asa.lieuStage=this.value;save()"></div><div class="f"><label>Organisé par (centre agréé)</label><input value="${esc(a.organisme || '')}" onchange="ReuDocs.docs(Reu.get('${id}')).asa.organisme=this.value;save()"></div></div>` : ''}
+      <div class="f"><label>Texte de la convocation</label><textarea style="min-height:60px" placeholder="${esc(ReuDocs.introConv(Object.assign({}, r, { docs: Object.assign({}, d, { intro: '' }) })))}" onchange="${set('intro', 'this.value.trim()')}">${esc(d.intro || '')}</textarea></div>
+      <div class="f"><label>Phrase finale</label><input value="${esc(d.finale || '')}" placeholder="Ta présence est indispensable." onchange="${set('finale', 'this.value.trim()')}"></div>
+      <div class="f"><label>Invité(s) du SNETAA national</label><div>${N.length ? N.map(n => `<label class="chk" style="margin-right:1rem"><input type="checkbox" ${d.invites.includes(n.id) ? 'checked' : ''} onchange="ReuDocs.basculeInvite('${id}','${n.id}',this.checked)"> ${esc(n.prenom + ' ' + String(n.nom).toUpperCase())}${n.fonction ? ' <span class="mut small">(' + esc(n.fonction) + ')</span>' : ''}</label>`).join('') : '<span class="small mut">Aucun membre du national dans la liste.</span>'} <button class="btn sm ghost" onclick="ReuDocs.reglages('nat')">Gérer la liste</button></div>
+        ${d.invites.length ? '<div class="small mut">Une ligne « Intervention du SNETAA national » est ajoutée en tête de l’ordre du jour (sauf si un point « national » y figure déjà).</div>' : ''}</div>
+      <div class="toolbar" style="margin-top:.4rem"><button class="btn sm sec" onclick="ReuDocs.voirODJ('${id}')">📄 Ordre du jour</button><button class="btn sm sec" onclick="ReuDocs.voirVierge('${id}')">📄 Convocation sans nom</button>
+        ${d.invites.length ? `<button class="btn sm sec" onclick="ReuDocs.envoiNational('${id}')">🤝 Invitation du national</button>` : ''}
+        <button class="btn sm" onclick="ReuDocs.envoi('${id}')" ${nb ? '' : 'disabled'}>✉ Convoquer les participants (${conv}/${nb})</button>
+        <button class="btn sm sec" onclick="ReuDocs.zip('${id}')" ${nb ? '' : 'disabled'}>📦 Tous les dossiers (publipostage)</button>
+        <button class="btn sm ghost" onclick="ReuDocs.reglages()">⚙ Lieux, signature, réglages</button></div>
+      <p class="small mut" style="margin:.3rem 0 0">Chaque participant reçoit un seul PDF : sa convocation, l'ordre du jour et ${art === 'aucun' ? 'aucun formulaire' : 'le formulaire « Exercice du droit syndical » pré-rempli à son nom'}. Les points de l'ordre du jour se modifient avec « Modifier ».</p></div>`;
+  },
+  set(id, k, v) { ReuDocs.docs(Reu.get(id))[k] = v; save(); },
+  setAsa(id, v) { const a = ReuDocs.docs(Reu.get(id)).asa; if (v === '13.1') { a.article = '13'; a.sous = '13.1'; } else { a.article = v; a.sous = v === '13' ? '13.2' : a.sous; } save(); Reu.fiche(id); },
+  basculeInvite(id, nid, on) { const d = ReuDocs.docs(Reu.get(id)); d.invites = d.invites.filter(x => x !== nid); if (on) d.invites.push(nid); save(); Reu.fiche(id); },
+  async attente(fn, msg) { UI.toast(msg || 'Préparation des documents…'); try { return await fn(); } catch (e) { console.error(e); UI.toast('Document impossible : ' + e.message, 'r'); } },
+  async voirODJ(id) { const r = Reu.get(id); await ReuDocs.attente(async () => ReuDocs.telecharger(ReuDocs.fichier(r, { nom: 'Ordre_du_jour' }, 'SNETAA-FO'), await ReuDocs.octets(await ReuDocs.pdfODJ(r)))); },
+  async voirVierge(id) { const r = Reu.get(id); await ReuDocs.attente(async () => { const art = ((r.docs || {}).asa || {}).article || '13'; const l = [await ReuDocs.pdfConvocation(r, null), await ReuDocs.pdfODJ(r)]; if (art !== 'aucun') l.push(await ReuDocs.pdfASA(r, null)); ReuDocs.telecharger(ReuDocs.fichier(r, { nom: 'Convocation' }, 'SNETAA-FO'), await ReuDocs.fusion(l)); }); },
+  async un(id, i) { const r = Reu.get(id), x = r.participants[i]; await ReuDocs.attente(async () => ReuDocs.telecharger(ReuDocs.fichier(r, ReuDocs.personne(x), 'Convocation'), await ReuDocs.dossier(r, x))); },
+
+  /* envoi un par un : télécharger le dossier, ouvrir le mail pré-rédigé dans Thunderbird, cocher « convoqué » */
+  envoi(id) {
+    const r = Reu.get(id);
+    const lignes = r.participants.map((x, i) => { const p = ReuDocs.personne(x); return `<tr><td><b>${esc(p.nomComplet || Reu.nom(x))}</b><div class="small mut">${esc(p.etab || '')}</div></td><td class="small">${p.email ? esc(p.email) : '<span class="tag ko">pas de mail</span>'}</td>
+      <td class="nowrap"><button class="btn sm sec" onclick="ReuDocs.un('${id}',${i})">⬇ PDF</button> ${p.email ? `<button class="btn sm" onclick="ReuDocs.mail('${id}',${i})">✉ Mail</button>` : ''}</td>
+      <td class="nowrap small">${x.convoque ? '✔ ' + fmtDate(x.convoque) : `<button class="btn sm ghost" onclick="ReuDocs.marque('${id}',${i})">Marquer convoqué</button>`}</td></tr>`; }).join('');
+    UI.modal('Convoquer les participants', `<p class="small">Pour chacun : <b>⬇ PDF</b> télécharge son dossier (convocation + ordre du jour + formulaire), puis <b>✉ Mail</b> ouvre dans Thunderbird le mail pré-rédigé : joins-y le PDF et envoie-le depuis l'adresse <b>${esc((D.meta.syndicat || {}).mail || 'capa@snetaaot.org')}</b>. Le participant est alors noté « convoqué ».</p>
+      <p class="small mut">Pour tout envoyer d'un coup, utilise plutôt « 📦 Tous les dossiers (publipostage) » avec le module Mail Merge de Thunderbird.</p>
+      <div class="tablewrap" style="max-height:55vh"><table><thead><tr><th>Participant</th><th>Mail</th><th></th><th>Convocation</th></tr></thead><tbody>${lignes}</tbody></table></div>`, [{ label: 'Fermer', onClick: () => { Reu.fiche(id); } }], { wide: true });
+  },
+  mail(id, i) { const r = Reu.get(id), x = r.participants[i], p = ReuDocs.personne(x); openLink(mailto(p.email, ReuDocs.sujet(r), ReuDocs.corpsMail(r, p))); ReuDocs.marque(id, i, true); },
+  marque(id, i, silencieux) { const x = Reu.get(id).participants[i]; x.convoque = x.convoque || todayISO(); save(); if (!silencieux) ReuDocs.envoi(id); else setTimeout(() => ReuDocs.envoi(id), 300); },
+
+  /* tout d'un coup : un ZIP avec un PDF par participant + le fichier de publipostage Mail Merge (Thunderbird) */
+  async zip(id) {
+    const r = Reu.get(id), c = ReuDocs.conf();
+    const dossier = await UI.prompt('Dossier de destination', 'Dans quel dossier de ton ordinateur vas-tu décompresser le fichier ZIP ? (chemin complet : Mail Merge en a besoin pour joindre chaque PDF)', (c.dossierPJ || 'C:\\Convocations\\').replace(/\d{4}-\d{2}-\d{2}[\\/]?$/, '') .replace(/[\\/]?$/, '\\') + r.date + '\\', 'text');
+    if (dossier == null) return; c.dossierPJ = dossier; save();
+    const base = dossier.replace(/[\\/]?$/, dossier.includes('/') ? '/' : '\\');
+    await ReuDocs.attente(async () => {
+      const odj = await ReuDocs.octets(await ReuDocs.pdfODJ(r)), CFB = XLSX.CFB, z = CFB.utils.cfb_new(), rows = [['Email', 'Prenom', 'Nom', 'Objet', 'PieceJointe']], sans = [];
+      let k = 0;
+      for (const x of r.participants) {
+        const p = ReuDocs.personne(x), nom = ReuDocs.fichier(r, p, 'Convocation');
+        CFB.utils.cfb_add(z, '/' + nom, await ReuDocs.dossier(r, x, odj)); k++;
+        if (p.email) rows.push([p.email, p.prenom, p.nom, ReuDocs.sujet(r), base + nom]); else sans.push(p.nomComplet);
+      }
+      CFB.utils.cfb_add(z, '/' + ReuDocs.fichier(r, { nom: 'Ordre_du_jour' }, 'SNETAA-FO'), odj);
+      const csv = '\ufeff' + rows.map(l => l.map(v => '"' + String(v || '').replace(/"/g, '""') + '"').join(',')).join('\r\n');
+      CFB.utils.cfb_add(z, '/publipostage.csv', new TextEncoder().encode(csv));
+      const modele = ReuDocs.corpsMail(r, { prenom: '{{Prenom}}' });
+      const lis = ['ENVOI DES CONVOCATIONS AVEC THUNDERBIRD (module « Mail Merge »)', '', '1. Décompresse ce fichier ZIP dans : ' + base, '2. Dans Thunderbird, choisis l\'identité ' + ((D.meta.syndicat || {}).mail || 'capa@snetaaot.org') + ', écris un nouveau message :',
+        '   À : {{Email}}', '   Objet : {{Objet}}', '   Texte : copie le modèle ci-dessous.', '3. Menu Fichier > Mail Merge : Source = CSV, fichier = publipostage.csv (séparateur : virgule, encodage UTF-8),',
+        '   Pièces jointes = {{PieceJointe}}, Mode d\'envoi = « Envoyer plus tard » pour vérifier dans la boîte d\'envoi.', '4. Vérifie un message, puis Fichier > Envoyer les messages en attente.', '',
+        sans.length ? 'SANS ADRESSE MAIL (à remettre en main propre ou par courrier) : ' + sans.join(', ') : 'Tous les participants ont une adresse mail.', '', '--- MODÈLE DU MESSAGE ---', '', modele];
+      CFB.utils.cfb_add(z, '/LISEZ-MOI.txt', new TextEncoder().encode('\ufeff' + lis.join('\r\n')));
+      const out = CFB.write(z, { fileType: 'zip', type: 'array' });
+      download('Convocations_' + r.date + '.zip', new Blob([new Uint8Array(out)], { type: 'application/zip' }));
+      if (await UI.confirm(k + ' dossier(s) prêts' + (sans.length ? ' (' + sans.length + ' sans adresse mail)' : '') + '. Noter tous les participants comme « convoqués » aujourd\'hui ?', 'Oui, noter')) { r.participants.forEach(x => { x.convoque = x.convoque || todayISO(); }); save(); Reu.fiche(id); }
+    }, 'Préparation des ' + r.participants.length + ' dossiers…');
+  },
+
+  /* invitation du ou des membres du national */
+  envoiNational(id) {
+    const r = Reu.get(id), L = ReuDocs.invites(r);
+    UI.modal('Inviter le SNETAA national', `<p class="small">La lettre d'invitation est accompagnée de l'ordre du jour. Envoie-la depuis l'adresse <b>${esc(ReuDocs.conf().mail)}</b> (identité à choisir dans Thunderbird) : joins le PDF téléchargé au mail pré-rédigé.</p>
+      <div class="f"><label>Texte de l'invitation (facultatif)</label><textarea style="min-height:80px" placeholder="Cher camarade, nous avons le plaisir de t’inviter…" onchange="ReuDocs.set('${id}','texteInvite',this.value.trim())">${esc((r.docs || {}).texteInvite || '')}</textarea></div>
+      <table><tbody>${L.map(n => `<tr><td><b>${esc(n.prenom + ' ' + String(n.nom).toUpperCase())}</b><div class="small mut">${esc(n.fonction || '')} ${esc(n.mail || '')}</div></td><td class="nowrap"><button class="btn sm sec" onclick="ReuDocs.pdfNat('${id}','${n.id}')">⬇ PDF</button> ${n.mail ? `<button class="btn sm" onclick="ReuDocs.mailNat('${id}','${n.id}')">✉ Mail</button>` : ''}</td></tr>`).join('')}</tbody></table>`, [{ label: 'Fermer' }]);
+  },
+  async pdfNat(id, nid) { const r = Reu.get(id), n = ReuDocs.nationaux().find(x => x.id === nid); await ReuDocs.attente(async () => ReuDocs.telecharger(ReuDocs.fichier(r, { nom: n.nom, prenom: n.prenom }, 'Invitation'), await ReuDocs.fusion([await ReuDocs.pdfInvitation(r, n), await ReuDocs.pdfODJ(r)]))); },
+  mailNat(id, nid) { const r = Reu.get(id), n = ReuDocs.nationaux().find(x => x.id === nid); openLink(mailto(n.mail, ReuDocs.sujetInvite(r), ReuDocs.corpsInvite(r, n))); const d = ReuDocs.docs(r); d.invitesEnvoyes = Object.assign({}, d.invitesEnvoyes, { [nid]: todayISO() }); save(); },
+
+  /* ---------- Réglages : lieux, membres du national, signature, textes ---------- */
+  reglages(onglet) {
+    const c = ReuDocs.conf(), L = ReuDocs.lieux(), N = ReuDocs.nationaux();
+    const lieu = (l, i) => `<tr><td><input value="${esc(l.nom || '')}" placeholder="Nom du lieu" onchange="ReuDocs.lieux()[${i}].nom=this.value;save()"></td><td><input value="${esc(l.adresse || '')}" placeholder="Adresse" onchange="ReuDocs.lieux()[${i}].adresse=this.value;delete ReuDocs.lieux()[${i}].lat;save()"></td><td><input style="width:70px" value="${esc(l.cp || '')}" placeholder="CP" onchange="ReuDocs.lieux()[${i}].cp=this.value;delete ReuDocs.lieux()[${i}].lat;save()"></td><td><input value="${esc(l.ville || '')}" placeholder="Ville" onchange="ReuDocs.lieux()[${i}].ville=this.value;delete ReuDocs.lieux()[${i}].lat;save()"></td><td><button class="btn sm ghost" onclick="ReuDocs.lieux().splice(${i},1);save();ReuDocs.reglages()">✕</button></td></tr>`;
+    const nat = (n, i) => `<tr><td><input value="${esc(n.prenom || '')}" placeholder="Prénom" onchange="ReuDocs.nationaux()[${i}].prenom=this.value;save()"></td><td><input value="${esc(n.nom || '')}" placeholder="NOM" onchange="ReuDocs.nationaux()[${i}].nom=this.value;save()"></td><td><input value="${esc(n.fonction || '')}" placeholder="Secrétaire national" onchange="ReuDocs.nationaux()[${i}].fonction=this.value;save()"></td><td><input value="${esc(n.mail || '')}" placeholder="Courriel" onchange="ReuDocs.nationaux()[${i}].mail=this.value.trim();save()"></td><td><button class="btn sm ghost" onclick="ReuDocs.nationaux().splice(${i},1);save();ReuDocs.reglages('nat')">✕</button></td></tr>`;
+    const champ = (k, lab, ph) => `<div class="f"><label>${lab}</label><input value="${esc(c[k] || '')}" placeholder="${esc(ph || '')}" onchange="ReuDocs.conf().${k}=this.value.trim();save()"></div>`;
+    UI.modal('Documents des réunions : réglages', `
+      <h3 style="margin-top:0">Lieux de réunion</h3><div class="tablewrap"><table><tbody>${L.map(lieu).join('')}</tbody></table></div><p><button class="btn sm sec" onclick="ReuDocs.lieux().push({id:uid(),nom:'',adresse:'',cp:'',ville:''});save();ReuDocs.reglages()">+ Ajouter un lieu</button></p>
+      <h3 id="rd_nat">Membres du SNETAA national à inviter</h3><p class="small mut">Ex. le secrétaire national qui vient au conseil syndical académique ou à l'assemblée générale des adhérents.</p><div class="tablewrap"><table><tbody>${N.map(nat).join('') || '<tr><td class="mut small">Aucun</td></tr>'}</tbody></table></div><p><button class="btn sm sec" onclick="ReuDocs.nationaux().push({id:uid(),prenom:'',nom:'',fonction:'Secrétaire national',mail:''});save();ReuDocs.reglages('nat')">+ Ajouter</button></p>
+      <h3>Signataire et en-tête</h3><div class="frow">${champ('signataireTitre', 'Titre')}${champ('signataireNom', 'Nom')}${champ('faitA', 'Fait à')}</div><div class="frow">${champ('tel', 'Téléphone')}${champ('mail', 'Courriel sur les documents')}${champ('delaiASA', 'Délai de dépôt du formulaire')}</div>
+      <div class="f"><label>Signature manuscrite (image, conservée uniquement dans les données de l'application)</label><div>${c.signature ? `<img src="${c.signature}" style="max-height:60px;border:1px solid var(--line);background:#fff"> <button class="btn sm ghost" onclick="delete ReuDocs.conf().signature;save();ReuDocs.reglages()">Retirer</button>` : '<span class="small mut">aucune</span>'} <button class="btn sm sec" onclick="ReuDocs.choisirSignature()">Choisir une image…</button></div></div>
+      <div class="f"><label>Encadré « Déplacements » de l'ordre du jour (vide = pas d'encadré)</label><textarea onchange="ReuDocs.conf().noteODJ=this.value.trim();save()">${esc(c.noteODJ || '')}</textarea></div>`, [{ label: 'Fermer', onClick: () => { if (location.hash.startsWith('#/reunion/')) App.route(); } }], { wide: true });
+    if (onglet === 'nat') setTimeout(() => { const e = document.getElementById('rd_nat'); if (e) e.scrollIntoView(); }, 50);
+  },
+  async choisirSignature() {
+    const f = await pickFile('image/*'); if (!f) return;
+    const url = await new Promise(ok => { const fr = new FileReader(); fr.onload = () => ok(fr.result); fr.readAsDataURL(f); });
+    const im = await new Promise((ok, ko) => { const i = new Image(); i.onload = () => ok(i); i.onerror = ko; i.src = url; });
+    const k = Math.min(1, 600 / im.naturalWidth), cv = document.createElement('canvas'); cv.width = Math.round(im.naturalWidth * k); cv.height = Math.round(im.naturalHeight * k);
+    const g = cv.getContext('2d'); g.fillStyle = '#fff'; g.fillRect(0, 0, cv.width, cv.height); g.drawImage(im, 0, 0, cv.width, cv.height);
+    ReuDocs.conf().signature = cv.toDataURL('image/jpeg', 0.85); save(); ReuDocs.reglages();
+  }
+
 };

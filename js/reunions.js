@@ -32,7 +32,7 @@ const Reu = {
     const ap = l.filter(r => r.date >= todayISO()), pa = l.filter(r => r.date < todayISO());
     const row = r => { const pr = r.participants.filter(x => x.statut === 'présent').length, oui = r.participants.filter(x => Reu.rep(x) === 'oui').length;
       return `<tr class="click" onclick="App.go('reunion/${r.id}')"><td>${fmtDate(r.date)} ${esc(r.heure || '')}</td><td><b>${esc(r.titre)}</b>${r.vote && r.vote.actif ? ' <span class="tag v">🗳 vote</span>' : ''}${typeof Agenda !== 'undefined' && Agenda.vacance(Agenda.zoneDefaut(), r.date) ? ' <span class="tag w" title="Pendant les vacances scolaires de notre zone">' + esc(Agenda.vacance(Agenda.zoneDefaut(), r.date)) + '</span>' : ''}<div class="small mut">${esc(r.type || '')}</div></td><td>${esc(r.lieu || '')}</td><td class="num">${r.date >= todayISO() && !pr ? oui + ' viennent / ' + r.participants.length : pr + ' / ' + r.participants.length}</td></tr>`; };
-    $('#main').innerHTML = `<div class="pagehead"><div><h1>Réunions & présences</h1><div class="small"><a href="#/agenda">📅 Voir l'agenda avec les congés scolaires</a></div></div><div class="actions">${can('reu.gerer') ? `<button class="btn" onclick="Reu.edit()">+ Nouvelle réunion</button>` : ''}</div></div>
+    $('#main').innerHTML = `<div class="pagehead"><div><h1>Réunions & présences</h1><div class="small"><a href="#/agenda">📅 Voir l'agenda avec les congés scolaires</a></div></div><div class="actions">${can('reu.gerer') ? `<button class="btn sec" onclick="ReuDocs.reglages()">⚙ Lieux et documents</button><button class="btn" onclick="Reu.edit()">+ Nouvelle réunion</button>` : ''}</div></div>
       <h2>À venir</h2><div class="tablewrap"><table><thead><tr><th>Date</th><th>Réunion</th><th>Lieu</th><th class="num">Participation</th></tr></thead><tbody>${ap.map(row).join('') || '<tr><td colspan="4" class="mut">Aucune</td></tr>'}</tbody></table></div>
       <h2>Passées</h2><div class="tablewrap"><table><thead><tr><th>Date</th><th>Réunion</th><th>Lieu</th><th class="num">Présents / invités</th></tr></thead><tbody>${pa.map(row).join('') || '<tr><td colspan="4" class="mut">Aucune</td></tr>'}</tbody></table></div>`;
   },
@@ -43,8 +43,11 @@ const Reu = {
     const v = r.vote || { actif: false, mandats: [] }, q = Reu.regle(r);
     const acad = Mandats.TYPES.filter(t => t[2] === 'acad');
     UI.modal(id ? 'Modifier la réunion' : 'Nouvelle réunion', `<div class="f"><label>Intitulé</label><input id="r_t" value="${esc(r.titre || '')}"></div>
-      <div class="frow"><div class="f"><label>Type</label><select id="r_ty" onchange="Reu.typeChange(this.value)">${UI.opts(Reu.TYPES, r.type)}</select></div><div class="f"><label>Date</label><input type="date" id="r_d" value="${esc(r.date)}"></div><div class="f"><label>Heure</label><input type="time" id="r_h" value="${esc(r.heure || '')}"></div><div class="f"><label>Lieu</label><input id="r_l" value="${esc(r.lieu || '')}"></div></div>
-      <div class="f"><label>Ordre du jour</label><textarea id="r_o">${esc(r.odj || '')}</textarea></div>
+      <div class="frow"><div class="f"><label>Type</label><select id="r_ty" onchange="Reu.typeChange(this.value)">${UI.opts(Reu.TYPES, r.type)}</select></div><div class="f"><label>Date</label><input type="date" id="r_d" value="${esc(r.date)}"></div><div class="f"><label>Début</label><input type="time" id="r_h" value="${esc(r.heure || '')}"></div><div class="f"><label>Fin</label><input type="time" id="r_hf" value="${esc(r.heureFin || '')}"></div></div>
+      <div class="frow"><div class="f"><label>Lieu</label><select id="r_li" onchange="$('#r_lw').style.display=this.value?'none':''">${UI.opts([['', 'Autre lieu (à saisir)…'], ...ReuDocs.lieux().map(l => [l.id, [l.nom, l.ville].filter(Boolean).join(' – ')])], r.lieuId || (r.id ? '' : (ReuDocs.lieux()[0] || {}).id || ''))}</select></div>
+        <div class="f" id="r_lw" style="${(r.lieuId || (!r.id && ReuDocs.lieux().length)) ? 'display:none' : ''}"><label>Lieu (nom, adresse, ville)</label><input id="r_l" value="${esc(r.lieuId ? '' : (r.lieu || ''))}"></div>
+        <div class="f"><label>&nbsp;</label><button type="button" class="btn sm ghost" onclick="ReuDocs.reglages()">Gérer les lieux</button></div></div>
+      <div class="f"><label>Points à l'ordre du jour (un par ligne)</label><textarea id="r_o" style="min-height:90px">${esc(r.docs && r.docs.ordre ? r.docs.ordre.join('\n') : (r.odj || ''))}</textarea></div>
       <div class="card" style="margin:.6rem 0 0"><label class="chk"><input type="checkbox" id="r_va" ${v.actif ? 'checked' : ''} onchange="$('#r_vw').style.display=this.checked?'':'none'"> <b>Droit de vote réservé aux membres d'une instance</b></label>
         <div id="r_vw" style="${v.actif ? '' : 'display:none'}">
           <p class="small mut" style="margin:.3rem 0">Ont le droit de vote les participants qui ont un mandat en cours parmi :</p>
@@ -55,7 +58,9 @@ const Reu = {
           <label class="chk"><input type="checkbox" id="r_qpo" ${q.pouvoirs ? 'checked' : ''}> Les pouvoirs (procurations) comptent pour le quorum</label>
           <p class="small mut">Vérifie la règle dans les statuts. Le droit de vote peut aussi être ajusté participant par participant.</p></div></div>`,
       [{ label: 'Annuler' }, { label: 'Enregistrer', onClick: m => {
-        Object.assign(r, { titre: m.querySelector('#r_t').value || 'Réunion', type: m.querySelector('#r_ty').value, date: m.querySelector('#r_d').value, heure: m.querySelector('#r_h').value, lieu: m.querySelector('#r_l').value, odj: m.querySelector('#r_o').value });
+        Object.assign(r, { titre: m.querySelector('#r_t').value || 'Réunion', type: m.querySelector('#r_ty').value, date: m.querySelector('#r_d').value, heure: m.querySelector('#r_h').value, heureFin: m.querySelector('#r_hf').value, odj: m.querySelector('#r_o').value });
+        const li = m.querySelector('#r_li').value, lo = ReuDocs.lieu(li); r.lieuId = lo ? li : ''; r.lieu = lo ? [lo.nom, lo.ville].filter(Boolean).join(', ') : m.querySelector('#r_l').value;
+        ReuDocs.docs(r).ordre = r.odj.split('\n').map(x => x.replace(/^\s*(\d+[.)-]|[-•*])\s*/, '').trim()).filter(Boolean);
         r.vote = { actif: m.querySelector('#r_va').checked, mandats: $$('.r_vm', m).filter(c => c.checked).map(c => c.value) };
         r.quorum = { regle: m.querySelector('#r_qr').value, pct: +m.querySelector('#r_qp').value || 50, fixe: +m.querySelector('#r_qf').value || 0, pouvoirs: m.querySelector('#r_qpo').checked };
         D.meta.reuQuorum = r.quorum;
@@ -102,9 +107,10 @@ const Reu = {
     const g = can('reu.gerer'), vote = r.vote && r.vote.actif;
     const mode = Reu.mode[id] || (r.date <= todayISO() ? 'jour' : 'rep');
     $('#main').innerHTML = `<div class="pagehead noprint"><a class="btn ghost sm" href="#/reunions">← Réunions</a></div>
-      <div class="card"><div class="fiche-head"><div><div class="big">${esc(r.titre)}</div><div class="mut">${esc(r.type || '')} — ${fmtDate(r.date)} ${esc(r.heure || '')} — ${esc(r.lieu || '')}</div></div>
+      <div class="card"><div class="fiche-head"><div><div class="big">${esc(r.titre)}</div><div class="mut">${esc(r.type || '')} — ${fmtDate(r.date)} ${esc(r.heure || '')}${r.heureFin ? '–' + esc(r.heureFin) : ''} — ${esc(r.lieu || '')}</div></div>
       <div class="noprint" style="margin-left:auto;display:flex;gap:.4rem;flex-wrap:wrap">${g ? `<button class="btn sec" onclick="Reu.edit('${r.id}')">Modifier</button><button class="btn sec" onclick="Reu.ajouter('${r.id}')">+ Participants</button>` : ''}<button class="btn sec" onclick="Reu.feuille('${r.id}')">🖨 Émargement</button><button class="btn sec" onclick="Reu.pdf('${r.id}')">📄 Compte rendu PDF</button>${can('frais.saisir') ? `<button class="btn sec" onclick="Frais.depuisReunion('${r.id}')">🧾 Déclarer mes frais</button>` : ''}${g ? `<button class="btn sec" onclick="Reu.suppr('${r.id}')">Supprimer</button>` : ''}</div></div>
-      ${r.odj ? `<div class="msg" style="margin-top:.6rem">${esc(r.odj)}</div>` : ''}</div>
+      ${ReuDocs.pointsODJ(r).length && (r.odj || (r.docs && r.docs.ordre && r.docs.ordre.length)) ? `<ol class="small" style="margin:.6rem 0 0">${ReuDocs.pointsODJ(r).map(x => `<li>${esc(x)}</li>`).join('')}</ol>` : ''}</div>
+      ${g ? ReuDocs.carte(r) : ''}
       <div id="reu_vote"></div>
       <div class="tabs noprint"><button class="${mode === 'rep' ? 'on' : ''}" onclick="Reu.mode['${id}']='rep';Reu.filtre='tous';Reu.fiche('${id}')">✉ Réponses à la convocation</button><button class="${mode === 'jour' ? 'on' : ''}" onclick="Reu.mode['${id}']='jour';Reu.filtre='tous';Reu.fiche('${id}')">✔ Jour J : pointage</button></div>
       <div id="reu_stats"></div>

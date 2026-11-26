@@ -3,7 +3,7 @@
    Noyau : données, référentiels, comptes, droits, navigation
    ========================================================= */
 'use strict';
-const APP_VERSION = '2026-11-26 n°32';
+const APP_VERSION = '2026-11-26 n°33';
 
 /* ---------- Utilitaires ---------- */
 const $ = (s, r = document) => r.querySelector(s);
@@ -284,6 +284,7 @@ function migrate() {
     D.meta.etabsRef = sig;
   }
   D.personnes.forEach(p => (p.affectations || []).forEach(a => { if (a.uai && (!a.nom || !a.ville)) { const e = D.etablissements.find(x => x.uai === a.uai); if (e) { a.nom = a.nom || e.nom; a.ville = a.ville || e.ville; } } }));
+  if (!D.meta.baremeV && typeof Carriere !== 'undefined') { D.bareme = Carriere.BAREME_DEFAUT(); D.meta.baremeV = 1; }
   if (typeof Frais !== 'undefined') Frais.migrer();
 }
 
