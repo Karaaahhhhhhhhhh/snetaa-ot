@@ -48,7 +48,7 @@ const Secu = {
     return {
       personnes: ps, users: [usr], roles: D.roles, modeles: D.modeles, publications: (D.publications || []).map(x => Object.assign({}, x, { fichier: x.fichier && x.fichier.data.length < 1500000 ? x.fichier : null })),
       disciplines: D.disciplines, bareme: D.bareme || [], etablissements: D.etablissements.filter(e => e.manuel),
-      reunions: perms.has('reu.voir') ? D.reunions : [], frais: D.frais.filter(f => f.userId === u.id || perms.has('frais.valider')),
+      reunions: perms.has('reu.voir') ? D.reunions : [], frais: [], fraisFiches: Frais.pourMembre(u, perms),
       treso: perms.has('tres.voir') ? D.treso : null,
       sections: D.sections || [], national: D.national || null, dpe: D.dpe || null, validations: (D.validations || []).filter(v => v.par === u.id),
       meta: { sectionsMaj: D.meta.sectionsMaj || null, syndicat: D.meta.syndicat, elections: D.meta.elections, frais: D.meta.frais, exerciceDebutMois: D.meta.exerciceDebutMois, lockMinutes: D.meta.lockMinutes || 15, mailNational: D.meta.mailNational, mailsAcademies: D.meta.mailsAcademies, equipeLien: (D.meta.equipe || {}).lien || '', equipeDepot: (D.meta.equipe || {}).depot || '' }
@@ -125,7 +125,7 @@ const Secu = {
     D.roles = inv.roles; D.modeles = inv.modeles; D.publications = inv.publications; D.disciplines = inv.disciplines; D.bareme = inv.bareme;
     inv.etablissements.forEach(e => { if (!D.etablissements.some(x => x.uai === e.uai)) D.etablissements.push(e); });
     inv.reunions.forEach(r => { const i = D.reunions.findIndex(x => x.id === r.id); if (i >= 0) D.reunions[i] = r; else D.reunions.push(r); });
-    inv.frais.forEach(r => { const i = D.frais.findIndex(x => x.id === r.id); if (i >= 0) D.frais[i] = r; else D.frais.push(r); });
+    Frais.integrer(inv.fraisFiches || []);
     if (inv.treso) D.treso = inv.treso;
     if (inv.sections && inv.sections.length) D.sections = inv.sections;
     if (inv.national) D.national = inv.national;

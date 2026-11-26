@@ -234,11 +234,7 @@ const Carte = {
       } catch (e) { $('#trkm').textContent = ' : distance indisponible (' + e.message + ')'; }
     }
   },
-  versFrais(km) {
-    const ea = D.etablissements.find(e => e.uai === Carte.trajet.a), eb = D.etablissements.find(e => e.uai === Carte.trajet.b);
-    Frais.cur = { date: todayISO(), userId: ME.id, objet: 'Déplacement — ' + (eb ? eb.nom : ''), reunionId: '', lignes: [{ type: 'km', depart: ea ? ea.nom + ' — ' + ea.ville : 'Domicile de ' + ME.prenom + ' ' + ME.nom, arrivee: eb ? eb.nom + ' — ' + eb.ville : '', km, ar: true }], statut: 'brouillon', justifs: [] };
-    Frais.renderEdit();
-  }
+  versFrais(km) { Frais.depuisCarte(Carte.trajet.a, Carte.trajet.b); }
 };
 App.routes.carte = () => Carte.page();
 
@@ -288,7 +284,7 @@ const Params = {
         <div class="frow"><div class="f"><label>Courriel adhérents (questions courantes)</label><input value="${esc(s.mail)}" onchange="D.meta.syndicat.mail=this.value;save()"></div><div class="f"><label>Courriel institutionnel (national, rectorat, questions sensibles)</label><input value="${esc(s.mailContact || '')}" onchange="D.meta.syndicat.mailContact=this.value;save()"></div><div class="f"><label>Téléphone</label><input value="${esc(s.tel)}" onchange="D.meta.syndicat.tel=this.value;save()"></div></div>
         <div class="f"><label>Signature des mails</label><textarea onchange="D.meta.syndicat.signature=this.value;save()">${esc(s.signature)}</textarea></div></div>
       <div class="card"><h3 style="margin-top:0">Élections professionnelles</h3><div class="frow"><div class="f"><label>Ouverture du vote</label><input type="date" value="${esc(M.elections.debut)}" onchange="D.meta.elections.debut=this.value;save()"></div><div class="f"><label>Clôture</label><input type="date" value="${esc(M.elections.fin)}" onchange="D.meta.elections.fin=this.value;save()"></div></div>
-        <h3>Frais et trésorerie</h3><div class="frow"><div class="f"><label>Barème kilométrique (€/km)</label><input inputmode="decimal" value="${esc(String(M.frais.tauxKm).replace('.', ','))}" onchange="D.meta.frais.tauxKm=num(this.value);save()"></div><div class="f"><label>Début d'exercice comptable</label><select onchange="D.meta.exerciceDebutMois=+this.value;save()">${UI.opts([[9, 'Septembre'], [1, 'Janvier']], M.exerciceDebutMois)}</select></div></div>
+        <h3>Frais et trésorerie</h3><div class="frow"><div class="f"><label>Barème des frais</label><div class="small mut">Réglé dans <a href="#/frais" onclick="setTimeout(()=>document.querySelector('[data-tab=commun]')&&document.querySelector('[data-tab=commun]').click(),300)">Frais de déplacement → Réglages communs</a> (historique des barèmes par date d'effet).</div></div><div class="f"><label>Début d'exercice comptable</label><select onchange="D.meta.exerciceDebutMois=+this.value;save()">${UI.opts([[9, 'Septembre'], [1, 'Janvier']], M.exerciceDebutMois)}</select></div></div>
         <h3>Sécurité</h3><div class="f"><label>Verrouillage après inactivité (minutes, 0 = jamais)</label><input type="number" min="0" value="${M.lockMinutes}" onchange="D.meta.lockMinutes=+this.value;save()"></div></div></div>
       <div class="card"><h3 style="margin-top:0">Adresses pour les signalements</h3><div class="frow"><div class="f"><label>Courriel du national (mises à jour du fichier)</label><input value="${esc(M.mailNational)}" onchange="D.meta.mailNational=this.value.trim();save()" placeholder="à renseigner"></div><div class="f"><label>Copie systématique</label><input value="${esc(M.ccNational)}" onchange="D.meta.ccNational=this.value.trim();save()"></div></div>
         <details><summary>Courriels des sections académiques SNETAA-FO (changements d'académie)</summary><div class="frow" style="margin-top:.6rem">${REF.academies.filter(a => a !== s.academie).map(a => `<div class="f"><label>${esc(a)}</label><input value="${esc(M.mailsAcademies[a] || '')}" onchange="D.meta.mailsAcademies['${esc(a).replace(/'/g, "\\'")}']=this.value.trim();save()"></div>`).join('')}</div></details></div>
@@ -335,7 +331,7 @@ const Params = {
     exportXLSX('SNETAA-FO_OT_export_' + todayISO() + '.xlsx', {
       Personnes: D.personnes.map(Adh.row), Établissements: D.etablissements.map(e => ({ UAI: e.uai, Nom: e.nom, Type: e.type, Statut: e.statut, Adresse: e.adresse, CP: e.cp, Ville: e.ville, Téléphone: e.tel, Courriel: e.mail })),
       Réunions: D.reunions.map(r => ({ Date: fmtDate(r.date), Titre: r.titre, Type: r.type, Lieu: r.lieu, Inscrits: r.participants.length, Présents: r.participants.filter(x => x.statut === 'présent').length })),
-      Frais: D.frais.map(f => ({ Date: fmtDate(f.date), Militant: userName(f.userId), Objet: f.objet, Montant: Frais.total(f), Statut: Frais.STATUTS[f.statut][0] })),
+      Frais: (D.fraisFiches || []).map(f => ({ Mois: f.titre, Déclarant: userName(f.userId), Déplacements: f.deps.length, Montant: Frais.ficheCalc(f).total, Statut: (Frais.STATUTS[f.statut] || [f.statut])[0], 'Envoyée le': f.envoyeLe || '', 'Payée le': f.payeeLe || '' })),
       Trésorerie: D.treso.ecritures.map(e => ({ Date: fmtDate(e.date), Libellé: e.libelle, Montant: num(e.montant), Catégorie: Treso.cat(e.categorieId).nom }))
     });
   },

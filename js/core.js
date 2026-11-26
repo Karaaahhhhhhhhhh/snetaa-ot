@@ -3,7 +3,7 @@
    Noyau : données, référentiels, comptes, droits, navigation
    ========================================================= */
 'use strict';
-const APP_VERSION = '2026-11-26 n°31';
+const APP_VERSION = '2026-11-26 n°32';
 
 /* ---------- Utilitaires ---------- */
 const $ = (s, r = document) => r.querySelector(s);
@@ -192,7 +192,7 @@ const PERMS = [
   ['vot.voir', 'Voir le cahier de votants', 'Élections'], ['vot.modifier', 'Renseigner contacts et intentions', 'Élections'], ['vot.repartir', 'Répartir les contacts entre militants', 'Élections'], ['vot.emarg', 'Importer les listes de votants', 'Élections'],
   ['com.envoyer', 'Envoyer mails / SMS types', 'Communication'], ['com.modeles', 'Créer et modifier les modèles', 'Communication'],
   ['reu.voir', 'Voir les réunions', 'Réunions'], ['reu.gerer', 'Créer des réunions, pointer les présences', 'Réunions'],
-  ['frais.saisir', 'Déclarer ses frais', 'Frais'], ['frais.valider', 'Valider et payer les frais', 'Frais'],
+  ['frais.saisir', 'Déclarer ses frais', 'Frais'], ['frais.valider', 'Voir et traiter toutes les déclarations', 'Frais'], ['frais.regler', 'Régler le barème et les listes communes', 'Frais'],
   ['tres.voir', 'Consulter la trésorerie', 'Trésorerie'], ['tres.gerer', 'Saisir et modifier la trésorerie', 'Trésorerie'],
   ['adm.users', 'Gérer les utilisateurs et les droits', 'Administration'], ['adm.params', 'Paramètres de l\'application', 'Administration'], ['adm.sauvegarde', 'Sauvegarder / restaurer', 'Administration'], ['adm.journal', 'Voir le journal des actions', 'Administration']
 ];
@@ -203,7 +203,7 @@ function defaultRoles() {
     s3: { label: 'Secrétariat académique (S3)', perms: ALLPERMS.filter(p => !['adm.users', 'adm.params'].includes(p)) },
     s2: { label: 'Secrétaire départemental (S2)', perms: ['adh.voir', 'adh.modifier', 'adh.historique', 'adh.exporter', 'adh.national', 'vot.voir', 'vot.modifier', 'vot.repartir', 'vot.emarg', 'com.envoyer', 'reu.voir', 'reu.gerer', 'frais.saisir'] },
     s1: { label: 'Délégué d\'établissement (S1)', perms: ['adh.voir', 'adh.historique', 'vot.voir', 'vot.modifier', 'com.envoyer', 'reu.voir', 'frais.saisir'] },
-    tresorier: { label: 'Trésorier académique', perms: ['adh.voir', 'adh.voir_tout', 'adh.cotis', 'adh.exporter', 'reu.voir', 'frais.saisir', 'frais.valider', 'tres.voir', 'tres.gerer', 'adm.sauvegarde'] },
+    tresorier: { label: 'Trésorier académique', perms: ['adh.voir', 'adh.voir_tout', 'adh.cotis', 'adh.exporter', 'reu.voir', 'frais.saisir', 'frais.valider', 'frais.regler', 'tres.voir', 'tres.gerer', 'adm.sauvegarde'] },
     militant: { label: 'Militant sans mandat (ses contacts)', perms: ['adh.voir', 'vot.voir', 'vot.modifier', 'com.envoyer', 'reu.voir', 'frais.saisir'] },
     lecture: { label: 'Consultation seule', perms: ['adh.voir', 'adh.voir_tout', 'vot.voir', 'reu.voir', 'tres.voir'] }
   };
@@ -219,12 +219,12 @@ function defaultDB() {
       syndicat: { nom: 'SNETAA-FO', section: 'Orléans-Tours', academie: 'Orléans-Tours', mail: 'capa@snetaaot.org', tel: '06 23 24 64 02', signature: 'Christophe DENAGE\nSecrétaire académique SNETAA-FO Orléans-Tours\ncapa@snetaaot.org — 06 23 24 64 02' },
       mailNational: '', ccNational: '', mailsAcademies: {},
       elections: { debut: '2026-12-03', fin: '2026-12-10', scrutins: ['CSA ministériel', 'CSA académique', 'CAPN PLP', 'CAPA PLP', 'CCP contractuels'] },
-      frais: { tauxKm: 0.30, repas: 0, note: 'Barème à vérifier et ajuster selon les règles du syndicat.' },
+      frais: { baremes: [{ id: 'b0', depuis: '2000-01-01', km: 0.20, repasMax: 10 }] },
       exerciceDebutMois: 9, lockMinutes: 30, mappings: {}
     },
     roles: defaultRoles(),
     users: [], personnes: [], etablissements: [], disciplines: REF.disciplines.slice(),
-    bareme: [], imports: [], lastSnapshot: null, emargements: [], modeles: [], reunions: [], frais: [],
+    bareme: [], imports: [], lastSnapshot: null, emargements: [], modeles: [], reunions: [], frais: [], fraisFiches: [],
     treso: { comptes: [], categories: [], ecritures: [], budgets: {} },
     validations: [], sections: [], national: null, dpe: null,
     journal: []
@@ -284,6 +284,7 @@ function migrate() {
     D.meta.etabsRef = sig;
   }
   D.personnes.forEach(p => (p.affectations || []).forEach(a => { if (a.uai && (!a.nom || !a.ville)) { const e = D.etablissements.find(x => x.uai === a.uai); if (e) { a.nom = a.nom || e.nom; a.ville = a.ville || e.ville; } } }));
+  if (typeof Frais !== 'undefined') Frais.migrer();
 }
 
 /* ---------- Personnes : logique métier ---------- */
@@ -479,7 +480,7 @@ const UI = {
     n.push(['rectorat-dpe', 'Rectorat & DPE', '🏢', null, 'Vie syndicale']);
     n.push(['etabs', 'Établissements', '🏫', 'adh.voir', 'Vie syndicale']);
     n.push(['carte', 'Carte & déplacements', '🗺', 'adh.voir', 'Vie syndicale']);
-    n.push(['frais', 'Déclarations de frais', '🧾', 'frais.saisir', 'Finances', () => can('frais.valider') ? D.frais.filter(f => f.statut === 'soumise').length : 0]);
+    n.push(['frais', 'Déclarations de frais', '🧾', 'frais.saisir', 'Finances', () => Frais.aTraiter()]);
     n.push(['treso', 'Trésorerie', '🏦', 'tres.voir', 'Finances']);
     n.push(['users', 'Utilisateurs & droits', '🔑', 'adm.users', 'Administration']);
     n.push(['params', 'Paramètres', '⚙', 'adm.params', 'Administration']);
@@ -581,7 +582,7 @@ App.routes[''] = function () {
     <div class="tile b" onclick="Adh.filtreRapide('emailInvalide')"><div class="n">${vis.filter(p => p.emailInvalide).length}</div><div class="l">adresses mail en erreur</div></div>`;
   if (can('adh.national')) h += `<div class="tile" onclick="App.go('national')"><div class="n">${Adh.countDiffs()}</div><div class="l">fiches modifiées à signaler au national</div></div>`;
   if (can('vot.voir')) h += `<div class="tile g" onclick="App.go('bilan')"><div class="n">${votes}</div><div class="l">de nos contacts ont voté</div></div>`;
-  if (can('frais.valider')) h += `<div class="tile o" onclick="App.go('frais')"><div class="n">${D.frais.filter(f => f.statut === 'soumise').length}</div><div class="l">frais à valider</div></div>`;
+  if (can('frais.valider')) h += `<div class="tile o" onclick="App.go('frais')"><div class="n">${Frais.aTraiter()}</div><div class="l">déclarations de frais à traiter</div></div>`;
   if (can('tres.voir')) h += `<div class="tile g" onclick="App.go('treso')"><div class="n" style="font-size:1.2rem">${fmtEUR(Treso.soldeTotal())}</div><div class="l">solde de trésorerie</div></div>`;
   h += `</div>`;
   if (can('vot.voir')) {

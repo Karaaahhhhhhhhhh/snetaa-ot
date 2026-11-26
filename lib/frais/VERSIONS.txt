@@ -1,0 +1,8 @@
+Bibliothèques du module Frais (servies par le site, mises en cache à la première utilisation)
+jsPDF 2.5.1 — déjà présent dans lib/jspdf.umd.min.js (MIT)
+pdf.js 3.11.174 — pdf.min.js, pdf.worker.min.js (Apache-2.0)
+tesseract.js 5.1.1 — tesseract.min.js, worker.min.js (Apache-2.0)
+tesseract.js-core 5.1.1 — tesseract-core/tesseract-core-simd-lstm.wasm.js, tesseract-core-lstm.wasm.js (Apache-2.0)
+Modèle français fra 4.0.0_best_int (@tesseract.js-data/fra) — lang/fra.traineddata.gz (Apache-2.0)
+qrcode-generator 1.4.4 — qrcode.js (MIT)
+jsQR 1.4.0 — jsQR.js (Apache-2.0)

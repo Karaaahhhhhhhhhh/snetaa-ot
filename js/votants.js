@@ -240,6 +240,7 @@ const Votants = {
     const l = D.personnes.filter(p => p.militant === ME.id || (p.created || '') > dp || (p.maj || '') > dp || (p.vote.contacts || []).some(c => (c.date || '') >= dp.slice(0, 10)));
     const ret = { type: 'retour-militant', version: 1, date: nowISO(), militant: { id: ME.id, prenom: ME.prenom, nom: ME.nom }, personnes: l.map(p => ({ id: p.id, nom: p.nom, prenom: p.prenom, civilite: p.civilite, categorie: p.categorie, statut: p.statut, discipline: p.discipline, affectations: p.affectations, email: p.email, telPortable: p.telPortable, telFixe: p.telFixe, notes: p.notes, vote: p.vote, interventions: p.interventions, messages: p.messages, created: p.created, localEdits: p.localEdits, aValider: p.aValider || null })) };
     ret.validations = (D.validations || []).filter(v => v.par === ME.id);
+    ret.frais = Frais.pourRetour((D.meta.paquet && D.meta.paquet.date) || '');
     ret.journal = D.journal.filter(j => j.u === ME.id || !j.u).slice(0, 5000);
     return ret;
   },
@@ -257,7 +258,7 @@ const Votants = {
     if (r && r.type === 'retour-equipe') { const u = D.users.find(x => x.id === r.userId); if (!u || !u.invitation || !u.invitation.secret) return UI.toast('Expéditeur inconnu', 'r'); try { r = await Crypto.decrypt(r.data, u.invitation.secret); } catch (e) { return UI.toast('Retour illisible (clé)', 'r'); } }
     if (!r || r.type !== 'retour-militant') return UI.toast('Ce fichier n\'est pas un retour de militant', 'r');
     const st = Votants.appliquerRetour(r);
-    UI.modal('Retour intégré', `<p>Retour de <b>${esc(r.militant.prenom + ' ' + r.militant.nom)}</b> du ${fmtDT(r.date)} :</p><ul><li>${st.nMaj} fiches mises à jour</li><li>${st.nContacts} nouveaux contacts notés</li><li>${st.nNew} nouvelles personnes ajoutées (à valider)</li><li>${st.nVal} modification(s) proposée(s) → <a href="#/validations" onclick="UI.close()">à valider</a></li><li>${st.nJ} action(s) ajoutée(s) au journal</li></ul>`, [{ label: 'OK' }]);
+    UI.modal('Retour intégré', `<p>Retour de <b>${esc(r.militant.prenom + ' ' + r.militant.nom)}</b> du ${fmtDT(r.date)} :</p><ul><li>${st.nMaj} fiches mises à jour</li><li>${st.nContacts} nouveaux contacts notés</li><li>${st.nNew} nouvelles personnes ajoutées (à valider)</li><li>${st.nVal} modification(s) proposée(s) → <a href="#/validations" onclick="UI.close()">à valider</a></li><li>${st.nJ} action(s) ajoutée(s) au journal</li>${st.nFrais ? `<li>${st.nFrais} déclaration(s) de frais mise(s) à jour</li>` : ''}</ul>`, [{ label: 'OK' }]);
     App.route();
   },
   appliquerRetour(r) {
@@ -283,9 +284,10 @@ const Votants = {
     /* propositions faites sur l'appareil du militant (modifications, radiations…) */
     D.validations = D.validations || []; let nVal = 0;
     (r.validations || []).forEach(v => { if (!D.validations.some(x => x.id === v.id) && v.statut === 'attente' && P.get(v.pid)) { D.validations.push(Object.assign({}, v, { source: 'retour' })); nVal++; } });
+    let nFrais = 0; const uR = D.users.find(x => x.id === r.militant.id); if (r.frais && uR) nFrais = Frais.appliquerRetour(r.frais, uR, Droits.perms(uR));
     const nJ = Params.journalFusion(r.journal, r.militant.prenom + ' ' + r.militant.nom);
     save(); log('Retour militant intégré', `${r.militant.prenom} ${r.militant.nom} : ${nVal} proposition(s) à valider, ${nJ} action(s) ajoutée(s) au journal, ${nMaj} fiches, ${nNew} nouvelles, ${nContacts} contacts`);
-    return { nMaj, nNew, nContacts, nVal, nJ };
+    return { nMaj, nNew, nContacts, nVal, nJ, nFrais };
   },
 
   /* ---------- Listes de votants (émargement quotidien) ---------- */
