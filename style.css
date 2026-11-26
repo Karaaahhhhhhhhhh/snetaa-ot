@@ -158,7 +158,7 @@ td.num,th.num{text-align:right;white-space:nowrap}
   .toolbar input,.toolbar select{min-width:0;flex:1 1 140px}
 }
 @media (max-width:520px){ .frow{grid-template-columns:1fr} .frow .f[style*="span"]{grid-column:auto!important} }
-html,body{overflow-x:hidden;max-width:100%}
+html,body{overflow-x:clip;max-width:100%}
 .main,.card,.tablewrap{min-width:0;max-width:100%}
 .modal .mbody .tablewrap{max-width:100%}
 
