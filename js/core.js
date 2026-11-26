@@ -3,7 +3,7 @@
    Noyau : données, référentiels, comptes, droits, navigation
    ========================================================= */
 'use strict';
-const APP_VERSION = '2026-11-26 n°28';
+const APP_VERSION = '2026-11-26 n°29';
 
 /* ---------- Utilitaires ---------- */
 const $ = (s, r = document) => r.querySelector(s);
@@ -468,6 +468,7 @@ const UI = {
     n.push(['emargement', 'Qui a voté ? (3-10 déc.)', '✔', 'vot.emarg', 'Élections 2026']);
     n.push(['bilan', 'Tableau de bord élections', '▦', 'vot.voir', 'Élections 2026']);
     n.push(['modeles', 'Mails & SMS types', '✎', 'com.envoyer', 'Communication']);
+    n.push(['journaux', 'La Lettre (journal)', '🗞', null, 'Communication']);
     n.push(['publications', 'Publications & adhésion', '📰', 'com.envoyer', 'Communication']);
     n.push(['videos', 'Vidéos FNEC FP-FO', '▶', 'com.envoyer', 'Communication']);
     n.push(['reunions', 'Réunions & présences', '◷', 'reu.voir', 'Vie syndicale']);

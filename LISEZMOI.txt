@@ -35,6 +35,14 @@ index.html, style.css, js/ (programme), lib/ (Excel, cartographie), img/ (logos,
 Données publiques incluses : lycées de l'académie (ONISEP), formations post-bac
 (Parcoursup 2026), collèges, SEGPA et EREA (ONISEP), rectorat (sites Saint-Étienne et Coligny) et DSDEN.
 
+LA LETTRE DU SNETAA-FO (JOURNAL)
+Menu Communication > « La Lettre (journal) » : tous les numéros parus (mensuels et numéros
+spéciaux), à lire, télécharger et partager (lien, WhatsApp, SMS, mail). Dans les mails et
+SMS types, la variable {journal} insère le titre et le lien du dernier numéro.
+Ajouter un numéro : déposer le PDF dans journaux\ et sa couverture (page 1 en JPEG) dans
+journaux\couv\, puis ajouter l'entrée en tête de la liste dans js\journaux.js (mode
+d'emploi en haut du fichier) et augmenter le numéro de version dans sw.js.
+
 SÉCURITÉ DES ACCÈS (invitations)
 - Pour donner un accès : fiche de la personne > onglet « Accès & droits » > « Ouvrir un accès (invitation sécurisée) ».
 - Le fichier d'invitation (chiffré) part par mail ; le code d'accès (10 caractères) part par SMS. Valable 7 jours.

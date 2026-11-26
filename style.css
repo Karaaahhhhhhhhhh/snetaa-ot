@@ -220,3 +220,13 @@ td.b{font-weight:700}
 .vi-b{padding:.55rem .7rem;display:flex;flex-direction:column;gap:.4rem;flex:1}
 .vi-act{display:flex;flex-wrap:wrap;gap:.25rem;margin-top:auto}
 .vi-top{display:flex;justify-content:space-between;align-items:center;gap:.4rem}.vi-top label{display:flex;align-items:center;gap:.3rem;cursor:pointer}
+/* La Lettre (journal) */
+.jo-une{display:flex;gap:1.2rem;align-items:flex-start;flex-wrap:wrap}
+.jo-couv{flex:0 0 auto;width:min(230px,100%);display:block;border:1px solid var(--line);border-radius:6px;overflow:hidden;box-shadow:0 2px 10px rgba(27,42,74,.15)}
+.jo-couv img,.jo-mini img{width:100%;display:block}
+.jo-b{flex:1;min-width:240px;display:flex;flex-direction:column;gap:.4rem}
+.jo-b>.tag{align-self:flex-start}
+.jo-titre{font-style:italic;color:var(--violet)}
+.jo-som{margin:.2rem 0 .4rem 1.1rem;padding:0;font-size:.9rem;line-height:1.45}
+.jo-mini{display:block;aspect-ratio:497/702;max-height:300px;overflow:hidden;background:#f4f5f8;border-bottom:1px solid var(--line)}
+.jo-mini img{height:100%;object-fit:cover;object-position:top}
