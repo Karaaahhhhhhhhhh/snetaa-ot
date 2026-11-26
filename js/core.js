@@ -3,7 +3,7 @@
    Noyau : données, référentiels, comptes, droits, navigation
    ========================================================= */
 'use strict';
-const APP_VERSION = '2026-11-26 n°24';
+const APP_VERSION = '2026-11-26 n°25';
 
 /* ---------- Utilitaires ---------- */
 const $ = (s, r = document) => r.querySelector(s);
@@ -226,6 +226,7 @@ function defaultDB() {
     users: [], personnes: [], etablissements: [], disciplines: REF.disciplines.slice(),
     bareme: [], imports: [], lastSnapshot: null, emargements: [], modeles: [], reunions: [], frais: [],
     treso: { comptes: [], categories: [], ecritures: [], budgets: {} },
+    validations: [], sections: [], national: null, dpe: null,
     journal: []
   };
 }
@@ -256,8 +257,8 @@ const Store = {
 const _saveNow = () => Store.set('db', JSON.parse(JSON.stringify(D)));
 const save = debounce(_saveNow, 350);
 function log(action, detail) {
-  D.journal.unshift({ d: nowISO(), u: ME ? ME.id : '', a: action, x: detail || '' });
-  if (D.journal.length > 3000) D.journal.length = 3000;
+  D.journal.unshift({ id: uid(), d: nowISO(), u: ME ? ME.id : '', a: action, x: detail || '', app: /Android|iPhone|iPad|Mobi/i.test(navigator.userAgent) ? 'téléphone' : 'ordinateur' });
+  if (D.journal.length > 20000) D.journal.length = 20000;
   save();
 }
 function migrate() {
@@ -407,6 +408,7 @@ const Auth = {
     $('#login').classList.add('hidden'); $('#app').classList.remove('hidden');
     UI.renderNav(); UI.renderUser(); App.route(); Auth.armLock();
     if (typeof Sauv !== 'undefined') setTimeout(() => Sauv.verifierAuDemarrage(), 1200);
+    if (typeof Alertes !== 'undefined') Alertes.demarrer();
   },
   logout() { log('Déconnexion'); ME = null; sessionStorage.removeItem('snetaa-session'); location.hash = ''; Auth.render(); },
   armLock() {
@@ -454,6 +456,7 @@ const UI = {
     n.push(['', 'Accueil', '⌂', null, 'Général']);
     n.push(['adherents', 'Fichier adhérents', '👥', 'adh.voir', 'Adhérents']);
     n.push(['import', 'Import & assainissement', '⇪', 'adh.importer', 'Adhérents']);
+    if (ME && ME.role === 'admin') n.push(['validations', 'Modifications à valider', '✓', null, 'Adhérents', () => Valid.attente().length]);
     n.push(['national', 'Différences → national', '⇄', 'adh.national', 'Adhérents', () => Adh.countDiffs()]);
     n.push(['majadh', 'Mises à jour par l\'adhérent', '✉', 'adh.modifier', 'Adhérents']);
     n.push(['doublons', 'Doublons', '⧉', 'adh.modifier', 'Adhérents', () => Doublons.detecter().length]);
@@ -468,7 +471,10 @@ const UI = {
     n.push(['publications', 'Publications & adhésion', '📰', 'com.envoyer', 'Communication']);
     n.push(['reunions', 'Réunions & présences', '◷', 'reu.voir', 'Vie syndicale']);
     n.push(['mandats', 'Mandats S1 / S2 / S3', '★', 'adh.voir', 'Vie syndicale']);
-    n.push(['sections', 'Sections académiques', '☎', 'adh.voir', 'Vie syndicale']);
+    n.push(['agenda', 'Agenda & congés scolaires', '📅', null, 'Vie syndicale']);
+    n.push(['sections', 'Sections académiques', '☎', null, 'Vie syndicale']);
+    n.push(['snetaa-national', 'SNETAA national', '🏛', null, 'Vie syndicale']);
+    n.push(['rectorat-dpe', 'Rectorat & DPE', '🏢', null, 'Vie syndicale']);
     n.push(['etabs', 'Établissements', '🏫', 'adh.voir', 'Vie syndicale']);
     n.push(['carte', 'Carte & déplacements', '🗺', 'adh.voir', 'Vie syndicale']);
     n.push(['frais', 'Déclarations de frais', '🧾', 'frais.saisir', 'Finances', () => can('frais.valider') ? D.frais.filter(f => f.statut === 'soumise').length : 0]);

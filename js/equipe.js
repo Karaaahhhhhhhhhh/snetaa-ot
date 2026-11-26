@@ -138,10 +138,10 @@ const Equipe = {
           const r = await Crypto.decrypt(o.data, u.invitation.secret);
           const st = Votants.appliquerRetour(r);
           await Equipe.canal.deplacer(f.path_display, Equipe.DOSSIER_RETOURS + '/traites/' + f.name);
-          res.push(`<li><b>${esc(u.prenom + ' ' + u.nom)}</b> (${fmtDT(r.date)}) : ${st.nMaj} fiches, ${st.nContacts} contacts, ${st.nNew} nouvelles personnes</li>`);
+          res.push(`<li><b>${esc(u.prenom + ' ' + u.nom)}</b> (${fmtDT(r.date)}) : ${st.nMaj} fiches, ${st.nContacts} contacts, ${st.nNew} nouvelles personnes, ${st.nVal} modification(s) à valider, ${st.nJ} action(s) au journal</li>`);
         } catch (er) { res.push(`<li class="mut">${esc(f.name)} : non intégré (${esc(er.message)})</li>`); }
       }
-      UI.modal('Retours intégrés', `<ul>${res.join('')}</ul><p class="small mut">Les fichiers traités sont rangés dans « retours/traites » sur Dropbox.</p>`, [{ label: 'OK' }]); App.route();
+      UI.modal('Retours intégrés', `<ul>${res.join('')}</ul><p class="small mut">Les fichiers traités sont rangés dans « retours/traites » sur Dropbox.</p>${Valid.attente().length ? '<p><a class="btn" href="#/validations" onclick="UI.close()">Voir les modifications à valider (' + Valid.attente().length + ')</a></p>' : ''}`, [{ label: 'OK' }]); App.route();
     } catch (er) { UI.toast('Dropbox : ' + Equipe.erreurDroits(er), 'r'); }
   },
 

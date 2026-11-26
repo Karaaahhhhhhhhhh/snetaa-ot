@@ -5,7 +5,14 @@
 'use strict';
 const TYPES_ETAB = { LYC: 'Lycée', LP: 'Lycée professionnel', SEP: 'Section d\'enseignement professionnel', LPO: 'Lycée polyvalent', LGT: 'Lycée général et technologique', SGT: 'Section générale et technologique', LG: 'Lycée général', CLG: 'Collège', SEGPA: 'SEGPA', EREA: 'EREA', ADM: 'Service administratif', CIO: 'CIO', RECT: 'Rectorat', DSDEN: 'DSDEN', AUTRE: 'Autre' };
 const Etabs = {
-  f: { q: '', type: '', statut: '', dep: '', adh: '', offre: '' },
+  f: { q: '', types: [], statut: '', dep: '', adh: '', offre: '' },
+  /* couches de types d'établissements (cases à cocher, plusieurs à la fois) */
+  COUCHES: [['LP', 'LP / SEP', e => ['LP', 'SEP'].includes(e.type)], ['LPO', 'Lycées polyvalents', e => e.type === 'LPO'], ['LGT', 'Lycées généraux et technologiques', e => ['LGT', 'LG', 'SGT', 'LYC'].includes(e.type)],
+    ['CLG', 'Collèges', e => e.type === 'CLG'], ['SEGPA', 'SEGPA', e => e.type === 'SEGPA' || !!e.segpa], ['EREA', 'EREA', e => e.type === 'EREA'],
+    ['SRV', 'Rectorat, DSDEN, services', e => !!e.service || ['RECT', 'DSDEN', 'ADM', 'CIO'].includes(e.type)], ['AUTRE', 'Autres', e => !e.service && (!e.type || e.type === 'AUTRE')]],
+  typeOk(e) { const t = Etabs.f.types || []; return !t.length || Etabs.COUCHES.some(([k, , fn]) => t.includes(k) && fn(e)); },
+  setType(k, on) { const t = new Set(Etabs.f.types || []); on ? t.add(k) : t.delete(k); Etabs.f.types = Array.from(t); try { localStorage.setItem('snetaa-couches', JSON.stringify(Etabs.f.types)); } catch (x) { } },
+  toutTypes() { Etabs.f.types = []; try { localStorage.removeItem('snetaa-couches'); } catch (x) { } $$('.couche input').forEach(i => { i.checked = false; }); },
   offre(e, k) {
     const has = re => (e.prebac || []).some(x => re.test(x.f));
     return { cap: has(/^CAP/i), bacpro: has(/baccalaur[ée]at professionnel/i), bma: has(/m[ée]tiers d'art/i), cs: has(/sp[ée]cialisation/i), prepa: !!e.prepaMetiers, greta: !!e.greta, app: !!e.apprentissage, postbac: (e.postbac || []).length > 0 }[k];
@@ -13,17 +20,17 @@ const Etabs = {
   compte() { const m = {}; D.personnes.forEach(p => { if (p.archive) return; P.uais(p).forEach(u => { m[u] = m[u] || { adh: 0, aj: 0, symp: 0 }; if (p.categorie === 'adherent') { m[u].adh++; if (P.cotis(p) === 'ajour') m[u].aj++; } else m[u].symp++; }); }); return m; },
   filtered() {
     const f = Etabs.f, q = norm(f.q), cnt = Etabs.compte();
-    return D.etablissements.filter(e => (!f.type || (f.type === 'PRO' ? ['LP', 'SEP', 'LPO'].includes(e.type) || e.pro : e.type === f.type)) && (!f.statut || e.statut === f.statut) && (!f.dep || e.dep === f.dep) && (!f.offre || Etabs.offre(e, f.offre)) && (!f.adh || (cnt[e.uai] && (cnt[e.uai].adh || cnt[e.uai].symp))) && (!q || norm(e.nom + ' ' + e.ville + ' ' + e.uai).includes(q)))
+    return D.etablissements.filter(e => Etabs.typeOk(e) && (!f.statut || e.statut === f.statut) && (!f.dep || e.dep === f.dep) && (!f.offre || Etabs.offre(e, f.offre)) && (!f.adh || (cnt[e.uai] && (cnt[e.uai].adh || cnt[e.uai].symp))) && (!q || norm(e.nom + ' ' + e.ville + ' ' + e.uai).includes(q)))
       .sort((a, b) => (a.service ? 0 : 1) - (b.service ? 0 : 1) || (a.dep + a.ville + a.nom < b.dep + b.ville + b.nom ? -1 : 1));
   },
   filtres(cb) {
     const f = Etabs.f;
     return `<div class="toolbar"><input type="search" placeholder="Nom, ville, UAI…" value="${esc(f.q)}" oninput="Etabs.f.q=this.value;${cb}Deb()" style="flex:1;min-width:180px">
       <select onchange="Etabs.f.statut=this.value;${cb}()">${UI.opts([['Public', 'Public'], ['Privé', 'Privé']], f.statut, 'Public et privé')}</select>
-      <select onchange="Etabs.f.type=this.value;${cb}()">${UI.opts([['PRO', 'Voie pro (LP, SEP, LPO)'], ...Object.entries(TYPES_ETAB)], f.type, 'Tous types')}</select>
       <select onchange="Etabs.f.dep=this.value;${cb}()">${UI.opts(Object.entries(REF.departements).map(([k, v]) => [k, k + ' ' + v]), f.dep, 'Tous départements')}</select>
       <select onchange="Etabs.f.offre=this.value;${cb}()">${UI.opts([['cap', 'Propose un CAP'], ['bacpro', 'Propose un bac pro'], ['bma', 'Brevet des métiers d\'art'], ['cs', 'Certificat de spécialisation'], ['prepa', '3e prépa-métiers'], ['app', 'Apprentissage'], ['greta', 'GRETA'], ['postbac', 'Post-bac (BTS, CPGE…)']], f.offre, 'Toute offre de formation')}</select>
-      <label class="chk"><input type="checkbox" ${f.adh ? 'checked' : ''} onchange="Etabs.f.adh=this.checked?'1':'';${cb}()"> avec adhérents / sympathisants</label></div>`;
+      <label class="chk"><input type="checkbox" ${f.adh ? 'checked' : ''} onchange="Etabs.f.adh=this.checked?'1':'';${cb}()"> avec adhérents / sympathisants</label></div>
+      <div class="toolbar couches"><span class="small mut">Types affichés (aucune case cochée = tous) :</span>${Etabs.COUCHES.map(([k, l]) => `<label class="chk couche"><input type="checkbox" ${(f.types || []).includes(k) ? 'checked' : ''} onchange="Etabs.setType('${k}',this.checked);${cb}()">${k !== 'AUTRE' ? `<span class="dot" style="background:${Carte.COUL[k]}"></span>` : ''}${esc(l)}</label>`).join('')}<button class="btn sm ghost" onclick="Etabs.toutTypes();${cb}()" title="Décocher tout = tous les types">tout afficher</button></div>`;
   },
   page() {
     const ed = can('adm.params');
@@ -121,22 +128,36 @@ const Etabs = {
     });
   }
 };
+try { Etabs.f.types = JSON.parse(localStorage.getItem('snetaa-couches') || '[]') || []; } catch (x) { }
 App.routes.etabs = () => Etabs.page();
 
 /* ---------- Cartographie ---------- */
 const Carte = {
   map: null, layer: null, focus: null, trajet: { a: null, b: null },
-  couleur(e) { return e.service ? '#8c1c2c' : ['LP', 'SEP'].includes(e.type) ? '#e87400' : e.type === 'LPO' ? '#5f1a87' : '#1b2a4a'; },
+  COUL: { LP: '#e87400', LPO: '#5f1a87', LGT: '#1b2a4a', CLG: '#2a8a8a', SEGPA: '#c2185b', EREA: '#7a5c00', SRV: '#8c1c2c' },
+  couleur(e) { const C = Carte.COUL; return e.service || ['RECT', 'DSDEN', 'ADM', 'CIO'].includes(e.type) ? C.SRV : ['LP', 'SEP'].includes(e.type) ? C.LP : e.type === 'LPO' ? C.LPO : e.type === 'CLG' ? (e.segpa ? C.SEGPA : C.CLG) : e.type === 'SEGPA' ? C.SEGPA : e.type === 'EREA' ? C.EREA : C.LGT; },
+  /* Fonds administratifs : départements, académies, zones de congés scolaires (métropole) */
+  ZCOUL: { A: '#e86800', B: '#2f7fc1', C: '#5f9e3a', Corse: '#c80030' },
+  fondsAdmin() {
+    const G = window.GEO_FR; if (!G) return {};
+    if (!Carte.map.getPane('admin')) Carte.map.createPane('admin').style.zIndex = 350;
+    const zc = z => Carte.ZCOUL[z] || '#888';
+    const deps = L.geoJSON(G.deps, { pane: 'admin', style: { color: '#5a6478', weight: 1, fill: true, fillOpacity: 0, dashArray: '3 3' }, onEachFeature: (ft, l) => { const p = ft.properties; l.bindTooltip(`${p.code} — ${esc(p.nom)}<br><span class="small">Académie ${esc(p.acad)} · zone ${esc(p.zone)}</span>`, { sticky: true }); } });
+    const acads = L.layerGroup([L.geoJSON(G.acads, { pane: 'admin', style: ft => ({ color: '#601080', weight: 2.5, fillColor: '#601080', fillOpacity: ft.properties.nom === D.meta.syndicat.academie ? 0.10 : 0.02 }), onEachFeature: (ft, l) => { const p = ft.properties, s = typeof Sections !== 'undefined' && Sections.de(p.nom); l.bindPopup(`<b>Académie ${esc(p.nom)}</b><br>Zone de congés ${esc(p.zone)}${s ? `<br>SNETAA-FO : ${esc(s.responsables || '')}${s.mail ? '<br>✉ <a href="mailto:' + esc(s.mail) + '">' + esc(s.mail) + '</a>' : ''}${s.tel ? '<br>☎ ' + esc(s.tel) : ''}` : ''}`); } })]
+      .concat(G.acads.features.map(ft => L.marker([ft.properties.lat, ft.properties.lon], { pane: 'admin', interactive: false, icon: L.divIcon({ className: 'acadlabel', html: esc(ft.properties.nom), iconSize: null }) }))));
+    const zones = L.layerGroup([L.geoJSON(G.zones, { pane: 'admin', style: ft => ({ color: zc(ft.properties.zone), weight: 2, fillColor: zc(ft.properties.zone), fillOpacity: 0.22 }), onEachFeature: (ft, l) => { const z = ft.properties.zone, c = (window.CAL_SCOLAIRE || {}).calendriers || {}, k = c[z]; l.bindPopup(`<b>${z === 'Corse' ? 'Corse' : 'Zone ' + z}</b>${k ? '<br>' + k.v.map(v => `${esc(v[0])} : ${fmtDate(v[1])} → ${fmtDate(v[2])}`).join('<br>') : ''}<br><a href="#/agenda">Voir l'agenda des congés</a>`); } })]);
+    return { 'Départements': deps, 'Académies': acads, 'Zones de congés scolaires': zones };
+  },
   page() {
     const sansGeo = Carte.aRevoir().length;
-    $('#main').innerHTML = `<div class="pagehead"><div><h1>Cartographie</h1><div class="mut small">Lycées publics (pastille pleine) et privés (pastille creuse), rectorat et DSDEN. Taille = nombre de nos contacts.</div></div>
+    $('#main').innerHTML = `<div class="pagehead"><div><h1>Cartographie</h1><div class="mut small">Établissements publics (pastille pleine) et privés (pastille creuse), rectorat et DSDEN. Taille = nombre de nos contacts. Coche les types à afficher.</div></div>
       <div class="actions"><button class="btn sec" onclick="Carte.relocaliser()" title="Recalcule la position de tous les lieux">📍 Revérifier toutes les positions</button><a class="btn sec" href="#/etabs">Liste</a></div></div>
       <div id="geoinfo" class="alert small noprint" style="display:none"></div>
       <div class="card noprint" style="padding:.6rem">${Etabs.filtres('Carte.draw')}
-      <div class="small"><span class="dot" style="background:#e87400"></span>LP / SEP <span class="dot" style="background:#5f1a87"></span>Lycée polyvalent <span class="dot" style="background:#1b2a4a"></span>LGT / LG / SGT <span class="dot" style="background:#8c1c2c"></span>Rectorat / DSDEN · <span class="dot" style="background:#fff;border:2px solid #1b2a4a"></span>privé</div></div>
+      <div class="small"><span class="dot" style="background:#fff;border:2px solid #1b2a4a"></span>pastille creuse = privé · Départements, académies et zones de congés : à cocher en haut à droite de la carte (<span class="dot" style="background:#e86800"></span>zone A <span class="dot" style="background:#2f7fc1"></span>zone B <span class="dot" style="background:#5f9e3a"></span>zone C <span class="dot" style="background:#c80030"></span>Corse)</div></div>
       <div id="trajet" class="alert small noprint" style="display:none"></div>
       <div id="map" style="height:68vh;border-radius:10px;border:1px solid var(--line)"></div>
-      <p class="small mut">Fond de carte : Plan IGN (Géoplateforme) ou CARTO / OpenStreetMap, au choix en haut à droite de la carte. Connexion internet nécessaire.</p>`;
+      <p class="small mut">Fond de carte : Plan IGN (Géoplateforme) ou CARTO / OpenStreetMap, au choix en haut à droite de la carte, où l'on coche aussi les départements, les académies et les zones de congés scolaires (France métropolitaine ; contours IGN simplifiés). Connexion internet nécessaire pour le fond de carte.</p>`;
     if (!window.L) { $('#map').innerHTML = '<div class="alert r">Bibliothèque cartographique non chargée.</div>'; return; }
     Carte.map = L.map('map').setView([47.4, 1.6], 8);
     // Fonds de carte utilisables depuis un fichier local (OpenStreetMap refuse les pages ouvertes hors site internet)
@@ -145,8 +166,13 @@ const Carte = {
     const fonds = { 'Plan IGN': ign, 'Carte CARTO (OpenStreetMap)': carto };
     if (/^https?:/.test(location.protocol)) fonds['OpenStreetMap'] = L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 18, attribution: '© OpenStreetMap' });
     const choix = fonds[localStorage.getItem('snetaa-fond')] || ign; choix.addTo(Carte.map);
-    L.control.layers(fonds, null, { position: 'topright' }).addTo(Carte.map);
+    const admin = Carte.fondsAdmin(); let actifs = [];
+    try { actifs = JSON.parse(localStorage.getItem('snetaa-fonds-admin') || '["Départements"]'); } catch (x) { }
+    Object.entries(admin).forEach(([k, l]) => { if (actifs.includes(k)) l.addTo(Carte.map); });
+    L.control.layers(fonds, admin, { position: 'topright', collapsed: window.innerWidth < 700 }).addTo(Carte.map);
     Carte.map.on('baselayerchange', e => { try { localStorage.setItem('snetaa-fond', e.name); } catch (x) { } });
+    const memo = () => { try { localStorage.setItem('snetaa-fonds-admin', JSON.stringify(Object.keys(admin).filter(k => Carte.map.hasLayer(admin[k])))); } catch (x) { } };
+    Carte.map.on('overlayadd overlayremove', memo);
     Carte.layer = L.layerGroup().addTo(Carte.map);
     Carte.draw(); Carte.majTrajet();
     if (sansGeo && navigator.onLine !== false) setTimeout(() => Carte.localiser(true), 300);
@@ -313,9 +339,36 @@ const Params = {
       Trésorerie: D.treso.ecritures.map(e => ({ Date: fmtDate(e.date), Libellé: e.libelle, Montant: num(e.montant), Catégorie: Treso.cat(e.categorieId).nom }))
     });
   },
+  jf: { u: '', a: '', q: '', du: '', au: '' },
+  journalFiltre() {
+    const f = Params.jf, q = norm(f.q);
+    return D.journal.filter(j => (!f.u || j.u === f.u) && (!f.a || j.a === f.a) && (!f.du || (j.d || '').slice(0, 10) >= f.du) && (!f.au || (j.d || '').slice(0, 10) <= f.au) && (!q || norm(j.a + ' ' + j.x + ' ' + userName(j.u)).includes(q)));
+  },
   journal() {
-    $('#main').innerHTML = `<div class="pagehead"><div><h1>Journal des actions</h1><div class="mut small">${D.journal.length} entrées (les 3 000 dernières sont conservées)</div></div></div>
-      <div class="tablewrap"><table><thead><tr><th>Date</th><th>Utilisateur</th><th>Action</th><th>Détail</th></tr></thead><tbody>${D.journal.slice(0, 1000).map(j => `<tr><td class="nowrap small">${fmtDT(j.d)}</td><td>${esc(userName(j.u))}</td><td>${esc(j.a)}</td><td class="small">${esc(j.x)}</td></tr>`).join('')}</tbody></table></div>`;
+    const f = Params.jf, l = Params.journalFiltre();
+    const users = Array.from(new Set(D.journal.map(j => j.u))).map(u => [u, userName(u) || (u ? 'utilisateur supprimé' : 'système')]).sort((a, b) => a[1].localeCompare(b[1]));
+    const actions = Array.from(new Set(D.journal.map(j => j.a))).sort();
+    const par = {}; D.journal.forEach(j => { par[j.u] = par[j.u] || { n: 0, der: '' }; par[j.u].n++; if ((j.d || '') > par[j.u].der) par[j.u].der = j.d; });
+    $('#main').innerHTML = `<div class="pagehead"><div><h1>Journal des actions</h1><div class="mut small">${D.journal.length} entrées. Les actions faites sur les autres appareils arrivent ici avec les retours des militants et des membres de l'équipe.</div></div>
+      <div class="actions"><button class="btn sec" onclick="Params.journalExport()">Exporter (Excel)</button></div></div>
+      <div class="card"><h3 style="margin-top:0">Par utilisateur</h3><div class="tablewrap"><table><thead><tr><th>Utilisateur</th><th class="num">Actions</th><th>Dernière action</th><th>Dernière connexion</th><th>Dernier retour reçu</th></tr></thead><tbody>
+      ${users.map(([u, n]) => { const c = D.journal.find(j => j.u === u && j.a === 'Connexion'), r = D.journal.find(j => j.u === u && j.via); return `<tr class="click" onclick="Params.jf.u='${esc(u)}';Params.journal()"><td><b>${esc(n)}</b></td><td class="num">${par[u].n}</td><td class="small">${fmtDT(par[u].der)}</td><td class="small">${c ? fmtDT(c.d) + ' (' + esc(c.app || '?') + ')' : '—'}</td><td class="small">${r ? fmtDT(r.recu || r.d) : (users.length > 1 && u !== ME.id ? '—' : '')}</td></tr>`; }).join('')}</tbody></table></div></div>
+      <div class="card noprint"><div class="toolbar"><select onchange="Params.jf.u=this.value;Params.journal()">${UI.opts(users, f.u, 'Tous les utilisateurs')}</select>
+        <select onchange="Params.jf.a=this.value;Params.journal()">${UI.opts(actions, f.a, 'Toutes les actions')}</select>
+        <label class="small">du <input type="date" value="${esc(f.du)}" onchange="Params.jf.du=this.value;Params.journal()"></label><label class="small">au <input type="date" value="${esc(f.au)}" onchange="Params.jf.au=this.value;Params.journal()"></label>
+        <input type="search" placeholder="Nom, fiche, mot…" value="${esc(f.q)}" onchange="Params.jf.q=this.value;Params.journal()" style="flex:1;min-width:160px">
+        ${f.u || f.a || f.q || f.du || f.au ? '<button class="btn sm ghost" onclick="Params.jf={u:\'\',a:\'\',q:\'\',du:\'\',au:\'\'};Params.journal()">effacer les filtres</button>' : ''}</div>
+      <p class="small">${plural(l.length, 'entrée')}${l.length > 2000 ? ' (2 000 premières affichées : affine ou exporte)' : ''}</p></div>
+      <div class="tablewrap"><table><thead><tr><th>Date</th><th>Utilisateur</th><th>Action</th><th>Détail</th><th>Appareil</th></tr></thead><tbody>${l.slice(0, 2000).map(j => `<tr><td class="nowrap small">${fmtDT(j.d)}</td><td>${esc(userName(j.u))}</td><td>${esc(j.a)}</td><td class="small">${esc(j.x)}</td><td class="small mut">${esc(j.app || '')}${j.via ? '<br>reçu le ' + fmtDate(j.recu) : ''}</td></tr>`).join('') || '<tr><td colspan="5" class="mut">Aucune entrée</td></tr>'}</tbody></table></div>`;
+  },
+  journalExport() { exportXLSX('journal_SNETAA-FO_' + todayISO() + '.xlsx', { Journal: Params.journalFiltre().map(j => ({ Date: fmtDT(j.d), Utilisateur: userName(j.u), Action: j.a, Détail: j.x, Appareil: j.app || '', 'Reçu par retour le': j.recu ? fmtDT(j.recu) : '' })) }); log('Export du journal des actions'); },
+  /* entrées du journal reçues d'un autre appareil (retour) : ajoutées sans doublon */
+  journalFusion(l, via) {
+    if (!Array.isArray(l) || !l.length) return 0;
+    const cle = j => j.id || (j.d + '|' + j.u + '|' + j.a + '|' + j.x), vus = new Set(D.journal.map(cle)); let n = 0;
+    l.forEach(j => { if (!vus.has(cle(j))) { D.journal.push(Object.assign({}, j, { via: via || '', recu: nowISO() })); vus.add(cle(j)); n++; } });
+    D.journal.sort((a, b) => (a.d || '') < (b.d || '') ? 1 : -1); if (D.journal.length > 20000) D.journal.length = 20000;
+    return n;
   },
   aide() {
     $('#main').innerHTML = `<div class="pagehead"><div><h1>Aide & démarrage</h1></div></div>

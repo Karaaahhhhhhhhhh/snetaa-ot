@@ -180,3 +180,30 @@ html,body{overflow-x:hidden;max-width:100%}
 .mo-var{background:#efe6f6;color:var(--violet);border-radius:4px;padding:0 .15rem;font-weight:600}
 .mo-vars{display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:.25rem .8rem;margin-top:.5rem}
 @media(max-width:700px){.mo-bar{position:static}.mo-bar select{min-width:0;width:100%}.mo-bar .f{width:100%}}
+/* Cartographie : couches et étiquettes */
+.couches{gap:.2rem .8rem;margin-top:.3rem}
+.couche{font-size:.85rem;margin:0}
+.acadlabel{background:transparent;border:0;color:#601080;font-weight:700;font-size:11px;white-space:nowrap;text-shadow:0 0 3px #fff,0 0 3px #fff;transform:translate(-50%,-50%)}
+/* Bandeau d'alerte Dropbox */
+.alertbar{display:flex;flex-wrap:wrap;align-items:center;gap:.5rem;background:#fff4e5;border-bottom:2px solid #e87400;padding:.45rem 1rem;font-size:.9rem;position:sticky;top:0;z-index:40}
+.alertbar span{flex:1;min-width:200px}
+.alertbar{margin-left:230px}
+@media (max-width:900px){.alertbar{margin-left:0}}
+@media print{.alertbar{display:none}}
+/* Agenda */
+.agenda{display:grid;grid-template-columns:repeat(7,1fr);gap:2px;background:var(--line);border:1px solid var(--line);border-radius:10px;overflow:hidden;margin-bottom:1rem}
+.agh{background:#f3f0f7;text-align:center;font-size:.78rem;font-weight:600;padding:.3rem 0}
+.agd{background:#fff;min-height:92px;padding:.25rem .3rem;font-size:.75rem;overflow:hidden}
+.agd.vide{background:#fafafa}
+.agd.we .agn{color:#8a8a8a}
+.agd.auj{outline:2px solid #601080;outline-offset:-2px}
+.agn{font-weight:700;display:flex;gap:2px;align-items:center}
+.agz{color:#fff;border-radius:3px;font-size:.62rem;padding:0 3px;font-weight:700}
+.agf{color:#c80030;font-weight:600}
+.agv{font-weight:600;color:#1b2a4a}
+.agm{color:#5a6478;font-style:italic}
+.age{display:block;border-radius:4px;padding:1px 3px;margin-top:2px;color:#fff;text-decoration:none;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.age.reu{background:#601080}.age.elec{background:#c80030}
+td.b{font-weight:700}
+@media (max-width:600px){.agd{min-height:64px;font-size:.66rem;padding:.15rem}.agm{display:none}}
+.toolbar .couche input,.toolbar label.chk input[type=checkbox]{min-width:0;width:auto;flex:none}

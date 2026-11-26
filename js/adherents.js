@@ -74,6 +74,8 @@ const Adh = {
     return out;
   },
   aSignaler(p) {
+    if (p.aValider) return null;
+    if (p.radiation) return p.radiation.national && !p.radiation.signale ? { p, radiation: p.radiation, diffs: [], fusions: [], nouveau: false, academie: null, email: false, autreAcad: null, corps: null } : null;
     if (p.archive && !(p.changementAcademie && !p.changementAcademie.notifie) && !(p.changementCorps && !p.changementCorps.notifie)) return null;
     const r = { p, diffs: Adh.diffs(p), nouveau: false, academie: null, email: false, autreAcad: null, corps: null };
     if (p.changementCorps && !p.changementCorps.notifie) r.corps = p.changementCorps;
@@ -198,7 +200,8 @@ const Adh = {
   tab: 'id',
   fiche(id) {
     const p = P.get(id);
-    if (!p || !P.visibles().includes(p)) { $('#main').innerHTML = '<div class="alert r">Fiche introuvable ou hors de votre périmètre.</div>'; return; }
+    if (!p || (!P.visibles().includes(p) && !(p.archive && Valid.direct()))) { $('#main').innerHTML = '<div class="alert r">Fiche introuvable ou hors de votre périmètre.</div>'; return; }
+    Adh._vues = Adh._vues || {}; if (!Adh._vues[id] || Date.now() - Adh._vues[id] > 600000) { Adh._vues[id] = Date.now(); log('Consultation de fiche', P.full(p)); }
     const st = STATUT(p.statut);
     const tel = p.telPortable || p.telFixe;
     let h = `<div class="pagehead noprint"><a href="#/adherents" class="btn ghost sm">← Liste</a></div>
@@ -211,7 +214,7 @@ const Adh = {
         ${tel && can('com.envoyer') ? `<button class="btn sec" onclick="Comm.envoyerSelection(['${p.id}'],'sms')">SMS</button><a class="btn sec" href="tel:${esc(phoneIntl(tel))}">☎ Appeler</a>` : ''}
         ${can('com.envoyer') && p.statut !== 'RETR' && (p.categorie !== 'adherent' || ['ancien', 'retard'].includes(P.cotis(p))) ? `<button class="btn ok" onclick="Comm.envoyerSelection(['${p.id}'],null,'adhesion')">Proposer l'adhésion</button>` : ''}
         ${can('adh.modifier') ? `<button class="btn sec" onclick="Adh.intervention('${p.id}')">+ Intervention</button><button class="btn sec" onclick="Adh.importMessage('${p.id}')">⇩ Archiver un message</button><button class="btn sec" onclick="Adh.menu('${p.id}')">Autres actions ▾</button>` : ''}
-      </div></div></div>`;
+      </div></div></div>${Valid.bandeau(p)}`;
     const tabs = [['id', 'Identité & affectation'], ['cotis', 'Adhésion & cotisations'], ['mand', `Mandats (${Mandats.de(p).length})`], ['hist', `Historique (${p.interventions.length + p.messages.length})`], ['mut', `Mutations (${(p.mutations || []).length})`], ['vote', 'Élections'], ['reu', 'Réunions'], ['nat', 'Fichier national']];
     if (!can('adh.historique')) tabs.splice(tabs.findIndex(t => t[0] === 'hist'), 1);
     if (can('adm.users')) tabs.push(['acces', 'Accès & droits']);
@@ -286,12 +289,14 @@ const Adh = {
       b('🔎 Chercher dans l\'annuaire du rectorat (nom copié)', `Liens.annuaire('${id}')`),
       b('⧉ Fusionner avec une autre fiche (doublon)', `Doublons.choisirAutre('${id}')`),
       p.categorie !== 'adherent' || ['ancien', 'retard'].includes(P.cotis(p)) ? (p.refusAdhesion ? b('🎯 Remettre dans la liste « À faire adhérer »', `Adh.refusAdhesion('${id}',false)`) : b('🚫 Ne souhaite pas adhérer (retirer de la liste « À faire adhérer »)', `Adh.refusAdhesion('${id}',true)`)) : '',
-      p.archive ? b('Désarchiver la fiche', `Adh.archiver('${id}',false)`) : b('Archiver la fiche (ne fait plus partie du fichier)', `Adh.archiver('${id}',true)`),
+      p.radiation ? (Valid.direct() ? b('↺ Annuler la radiation définitive', `Radiation.annuler('${id}')`) : '') : b('✝ Radiation définitive (décès, démission…) : ne plus solliciter', `Radiation.ouvrir('${id}')`, 'red'),
+      p.radiation ? '' : p.archive ? b('Désarchiver la fiche', `Adh.archiver('${id}',false)`) : b('Archiver la fiche (ne fait plus partie du fichier)', `Adh.archiver('${id}',true)`),
       can('adm.params') ? b('Supprimer définitivement', `Adh.supprimer('${id}')`, 'red') : ''
     ].join(''), []);
   },
   emailInvalide(id, on) {
     const p = P.get(id);
+    if (on && !Valid.direct()) { Valid.proposer(p, 'emailInvalide', { email: p.email }); UI.toast('Signalement proposé : en attente de validation', 'g'); App.route(); return; }
     if (on) { p.emailInvalide = { date: todayISO(), email: p.email, par: ME.id }; log('Mail en erreur', P.full(p) + ' ' + p.email); UI.toast('Adresse signalée comme fausse. Elle apparaîtra dans le récapitulatif pour le national.'); }
     else { p.emailInvalide = null; log('Mail rétabli', P.full(p)); }
     P.touch(p); App.route();
@@ -429,7 +434,26 @@ const Adh = {
   saveEdit(m, p, isNew) {
     const g = s => (m.querySelector(s) || {}).value || '';
     if (!g('#e_nom').trim()) { UI.toast('Le nom est obligatoire', 'r'); return false; }
+    if (!isNew && !Valid.direct()) {
+      const c = JSON.parse(JSON.stringify(p)); Adh._lireForm(m, c);
+      const ch = Valid.diff(p, c);
+      if (!Object.keys(ch).length) { UI.toast('Aucune modification'); return; }
+      Valid.proposer(p, 'modif', { champs: ch });
+      UI.toast('Modification envoyée au secrétaire académique pour validation', 'g'); setTimeout(() => App.route(), 30); return;
+    }
     const before = {}; Adh.FIELDS.forEach(([f]) => before[f] = Adh.val(p, f));
+    Adh._lireForm(m, p);
+    const changed = Adh.FIELDS.map(f => f[0]).filter(f => before[f] !== Adh.val(p, f));
+    if (isNew) { if (!Valid.direct()) p.aValider = { date: nowISO(), par: ME.id }; D.personnes.push(p); log('Nouvelle fiche', P.full(p) + (p.aValider ? ' (à valider)' : '')); }
+    else log('Fiche modifiée', P.full(p) + (changed.length ? ' — ' + changed.map(f => (Adh.FIELDS.find(x => x[0] === f) || [f, f])[1] + ' : ' + (before[f] || '∅') + ' → ' + (Adh.val(p, f) || '∅')).join(' ; ') : ''));
+    P.touch(p, changed);
+    const autre = m.querySelector('#e_autre');
+    if (autre && autre.checked && g('#e_autreac')) { p.autreAcademie = { academie: g('#e_autreac'), date: todayISO(), notifie: null }; setTimeout(() => Adh.mailAcademie(p.id, 'autre'), 80); }
+    UI.toast('Fiche enregistrée', 'g');
+    setTimeout(() => isNew ? App.go('fiche/' + p.id) : App.route(), 30);
+  },
+  _lireForm(m, p) {
+    const g = s => (m.querySelector(s) || {}).value || '';
     Object.assign(p, {
       categorie: g('#e_cat'), civilite: g('#e_civ'), nom: g('#e_nom').trim().toUpperCase(), prenom: cap(g('#e_prenom').trim()), nomNaissance: g('#e_nn').trim().toUpperCase(), dateNaissance: g('#e_dn'), numAdherent: g('#e_num').trim(),
       email: normEmail(g('#e_mail')), emailPro: normEmail(g('#e_mailpro')), telPortable: normPhone(g('#e_tel')), telFixe: normPhone(g('#e_fixe')), adresse: g('#e_adr').trim(), cp: normCP(g('#e_cp')), ville: g('#e_ville').trim().toUpperCase(),
@@ -439,14 +463,6 @@ const Adh = {
     if (p.emailInvalide && p.emailInvalide.email !== p.email) p.emailInvalide = null;
     p.affectations = $$('.affrow', m).map(r => ({ uai: normUAI(r.querySelector('.a_uai').value), nom: r.querySelector('.a_nom').value.trim(), ville: r.querySelector('.a_ville').value.trim().toUpperCase(), quotite: r.querySelector('.a_q').value.trim(), principal: r.querySelector('.a_pr').checked })).filter(a => a.uai || a.nom);
     if (p.affectations.length && !p.affectations.some(a => a.principal)) p.affectations[0].principal = true;
-    const changed = Adh.FIELDS.map(f => f[0]).filter(f => before[f] !== Adh.val(p, f));
-    if (isNew) { D.personnes.push(p); log('Nouvelle fiche', P.full(p)); }
-    else log('Fiche modifiée', P.full(p) + (changed.length ? ' (' + changed.join(', ') + ')' : ''));
-    P.touch(p, changed);
-    const autre = m.querySelector('#e_autre');
-    if (autre && autre.checked && g('#e_autreac')) { p.autreAcademie = { academie: g('#e_autreac'), date: todayISO(), notifie: null }; setTimeout(() => Adh.mailAcademie(p.id, 'autre'), 80); }
-    UI.toast('Fiche enregistrée', 'g');
-    setTimeout(() => isNew ? App.go('fiche/' + p.id) : App.route(), 30);
   },
   intervention(pid, iid) {
     const p = P.get(pid); const it = iid ? p.interventions.find(x => x.id === iid) : { date: todayISO(), canal: 'tel', statut: 'terminée' };
@@ -588,6 +604,7 @@ const National = {
       <div class="tablewrap"><table><thead><tr><th>Adhérent</th><th>Nature</th><th>Fichier national</th><th>Valeur corrigée</th></tr></thead><tbody>
       ${l.map(r => {
       const rows = [];
+      if (r.radiation) rows.push(['Radiation définitive — ' + r.radiation.motif, 'adhérent' , 'à radier' + (r.radiation.date ? ' (' + fmtDate(r.radiation.date) + ')' : '')]);
       if (r.nouveau) rows.push(['Adhérent absent du fichier national', '', 'à créer']);
       if (r.autreAcad) rows.push(['Encore enregistré à ' + r.autreAcad.academie, r.autreAcad.academie, D.meta.syndicat.academie]);
       if (r.academie) rows.push(['Changement d\'académie', r.academie.ancienne, r.academie.nouvelle]);
@@ -604,6 +621,7 @@ const National = {
     const out = [];
     D.personnes.map(Adh.aSignaler).filter(Boolean).forEach(r => {
       const base = { 'N° adhérent': r.p.numAdherent || '', Nom: r.p.nom, Prénom: r.p.prenom, 'Date de naissance': fmtDate(r.p.dateNaissance) };
+      if (r.radiation) out.push(Object.assign({}, base, { Nature: 'Radiation définitive : ' + r.radiation.motif, 'Valeur actuelle (fichier national)': 'adhérent', 'Valeur corrigée': 'à radier' + (r.radiation.date ? ' (' + fmtDate(r.radiation.date) + ')' : '') + (r.radiation.detail ? ' — ' + r.radiation.detail : '') }));
       if (r.nouveau) out.push(Object.assign({}, base, { Nature: 'Nouvel adhérent à créer', 'Valeur actuelle (fichier national)': '', 'Valeur corrigée': [STATUT(r.p.statut)[1], r.p.discipline, P.etabs(r.p), r.p.email, r.p.telPortable].filter(Boolean).join(' / ') }));
       if (r.corps) out.push(Object.assign({}, base, { Nature: 'Changement de corps (départ vers ' + r.corps.syndicat + ')', 'Valeur actuelle (fichier national)': r.corps.ancien, 'Valeur corrigée': r.corps.nouveau + (r.corps.date ? ' au ' + fmtDate(r.corps.date) : '') }));
       if (r.autreAcad) out.push(Object.assign({}, base, { Nature: 'Rattachement académique', 'Valeur actuelle (fichier national)': r.autreAcad.academie, 'Valeur corrigée': D.meta.syndicat.academie }));
@@ -627,6 +645,7 @@ const National = {
     if (!await UI.confirm('Considérer toutes ces différences comme transmises au national ?', 'Oui, c\'est envoyé')) return;
     D.personnes.forEach(p => {
       const r = Adh.aSignaler(p); if (!r) return;
+      if (r.radiation) { p.radiation.signale = todayISO(); return; }
       r.diffs.forEach(d => p.signale[d.f] = d.apres);
       if (r.nouveau) p.signale.__nouveau = todayISO();
       if (r.email) p.emailInvalide.signale = todayISO();

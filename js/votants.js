@@ -238,7 +238,9 @@ const Votants = {
   donneesRetour() {
     const dp = (D.meta.paquet && D.meta.paquet.date) || '';
     const l = D.personnes.filter(p => p.militant === ME.id || (p.created || '') > dp || (p.maj || '') > dp || (p.vote.contacts || []).some(c => (c.date || '') >= dp.slice(0, 10)));
-    const ret = { type: 'retour-militant', version: 1, date: nowISO(), militant: { id: ME.id, prenom: ME.prenom, nom: ME.nom }, personnes: l.map(p => ({ id: p.id, nom: p.nom, prenom: p.prenom, civilite: p.civilite, categorie: p.categorie, statut: p.statut, discipline: p.discipline, affectations: p.affectations, email: p.email, telPortable: p.telPortable, telFixe: p.telFixe, notes: p.notes, vote: p.vote, interventions: p.interventions, messages: p.messages, created: p.created, localEdits: p.localEdits })) };
+    const ret = { type: 'retour-militant', version: 1, date: nowISO(), militant: { id: ME.id, prenom: ME.prenom, nom: ME.nom }, personnes: l.map(p => ({ id: p.id, nom: p.nom, prenom: p.prenom, civilite: p.civilite, categorie: p.categorie, statut: p.statut, discipline: p.discipline, affectations: p.affectations, email: p.email, telPortable: p.telPortable, telFixe: p.telFixe, notes: p.notes, vote: p.vote, interventions: p.interventions, messages: p.messages, created: p.created, localEdits: p.localEdits, aValider: p.aValider || null })) };
+    ret.validations = (D.validations || []).filter(v => v.par === ME.id);
+    ret.journal = D.journal.filter(j => j.u === ME.id || !j.u).slice(0, 5000);
     return ret;
   },
   async exporterRetour() {
@@ -255,14 +257,14 @@ const Votants = {
     if (r && r.type === 'retour-equipe') { const u = D.users.find(x => x.id === r.userId); if (!u || !u.invitation || !u.invitation.secret) return UI.toast('Expéditeur inconnu', 'r'); try { r = await Crypto.decrypt(r.data, u.invitation.secret); } catch (e) { return UI.toast('Retour illisible (clé)', 'r'); } }
     if (!r || r.type !== 'retour-militant') return UI.toast('Ce fichier n\'est pas un retour de militant', 'r');
     const st = Votants.appliquerRetour(r);
-    UI.modal('Retour intégré', `<p>Retour de <b>${esc(r.militant.prenom + ' ' + r.militant.nom)}</b> du ${fmtDT(r.date)} :</p><ul><li>${st.nMaj} fiches mises à jour</li><li>${st.nContacts} nouveaux contacts notés</li><li>${st.nNew} nouvelles personnes ajoutées</li></ul>`, [{ label: 'OK' }]);
+    UI.modal('Retour intégré', `<p>Retour de <b>${esc(r.militant.prenom + ' ' + r.militant.nom)}</b> du ${fmtDT(r.date)} :</p><ul><li>${st.nMaj} fiches mises à jour</li><li>${st.nContacts} nouveaux contacts notés</li><li>${st.nNew} nouvelles personnes ajoutées (à valider)</li><li>${st.nVal} modification(s) proposée(s) → <a href="#/validations" onclick="UI.close()">à valider</a></li><li>${st.nJ} action(s) ajoutée(s) au journal</li></ul>`, [{ label: 'OK' }]);
     App.route();
   },
   appliquerRetour(r) {
     let nMaj = 0, nNew = 0, nContacts = 0;
     r.personnes.forEach(np => {
       let p = P.get(np.id);
-      if (!p) { p = P.fix(Object.assign({}, np, { militant: np.militant || r.militant.id, ajoutManuel: np.categorie === 'adherent' })); D.personnes.push(p); nNew++; return; }
+      if (!p) { p = P.fix(Object.assign({}, np, { militant: np.militant || r.militant.id, ajoutManuel: np.categorie === 'adherent', aValider: { date: np.created || r.date, par: r.militant.id } })); D.personnes.push(p); nNew++; return; }
       const ids = new Set(p.vote.contacts.map(c => c.id));
       np.vote.contacts.forEach(c => { if (!ids.has(c.id)) { p.vote.contacts.push(c); nContacts++; } });
       if ((np.vote.intMaj || '') >= (p.vote.intMaj || '')) { p.vote.intention = np.vote.intention; p.vote.intMaj = np.vote.intMaj; }
@@ -270,14 +272,20 @@ const Votants = {
       if (np.vote.relais && !p.vote.relais) p.vote.relais = np.vote.relais;
       if (np.vote.aVote && !p.vote.aVote) { p.vote.aVote = true; p.vote.dateVote = np.vote.dateVote; p.vote.sourceVote = np.vote.sourceVote; }
       Scrutins.sync(p);
+      /* coordonnées et notes modifiées par le militant : soumises à la validation de l'administrateur */
+      const champs = {};
+      ['email', 'telPortable', 'telFixe', 'notes'].forEach(k => { if (np[k] && np[k] !== p[k] && !(r.validations || []).some(v => v.pid === p.id && v.statut === 'attente' && v.champs && v.champs[k])) champs[k] = { avant: p[k] || '', apres: np[k] }; });
+      if (Object.keys(champs).length && !(D.validations || []).some(v => v.pid === p.id && v.statut === 'attente' && v.par === r.militant.id && JSON.stringify(v.champs) === JSON.stringify(champs))) { D.validations = D.validations || []; D.validations.push({ id: uid(), pid: p.id, nom: P.full(p), type: 'modif', champs, date: r.date, par: r.militant.id, statut: 'attente', source: 'retour' }); }
       const ch = [];
-      ['email', 'telPortable', 'telFixe'].forEach(k => { if (np[k] && np[k] !== p[k]) { p[k] = np[k]; ch.push(k); } });
-      if (np.notes && np.notes !== p.notes) p.notes = np.notes;
       ['interventions', 'messages'].forEach(k => { const s = new Set(p[k].map(x => x.id)); (np[k] || []).forEach(x => { if (!s.has(x.id)) p[k].push(x); }); });
       if (ch.length) P.touch(p, ch); nMaj++;
     });
-    save(); log('Retour militant intégré', `${r.militant.prenom} ${r.militant.nom} : ${nMaj} fiches, ${nNew} nouvelles, ${nContacts} contacts`);
-    return { nMaj, nNew, nContacts };
+    /* propositions faites sur l'appareil du militant (modifications, radiations…) */
+    D.validations = D.validations || []; let nVal = 0;
+    (r.validations || []).forEach(v => { if (!D.validations.some(x => x.id === v.id) && v.statut === 'attente' && P.get(v.pid)) { D.validations.push(Object.assign({}, v, { source: 'retour' })); nVal++; } });
+    const nJ = Params.journalFusion(r.journal, r.militant.prenom + ' ' + r.militant.nom);
+    save(); log('Retour militant intégré', `${r.militant.prenom} ${r.militant.nom} : ${nVal} proposition(s) à valider, ${nJ} action(s) ajoutée(s) au journal, ${nMaj} fiches, ${nNew} nouvelles, ${nContacts} contacts`);
+    return { nMaj, nNew, nContacts, nVal, nJ };
   },
 
   /* ---------- Listes de votants (émargement quotidien) ---------- */

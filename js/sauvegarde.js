@@ -10,7 +10,7 @@ const Sauv = {
 
   /* ---------- Cohérence entre appareils (Dropbox) ---------- */
   sync() { try { return JSON.parse(localStorage.getItem('snetaa-sync') || 'null'); } catch (e) { return null; } },
-  async empreinte() { return Crypto.hash(JSON.stringify([D.personnes, D.users.map(u => Object.assign({}, u, { pin: '', salt: '' })), D.reunions, D.frais, D.treso, D.modeles, D.publications, D.etablissements.filter(e => e.manuel), D.mandats || null])); },
+  async empreinte() { return Crypto.hash(JSON.stringify([D.personnes, D.users.map(u => Object.assign({}, u, { pin: '', salt: '' })), D.reunions, D.frais, D.treso, D.modeles, D.publications, D.etablissements.filter(e => e.manuel), D.mandats || null, D.validations || [], D.national || null, D.dpe || null, D.sections || []])); },
   async marquerSync(nom, srv) { localStorage.setItem('snetaa-sync', JSON.stringify({ nom, srv, at: nowISO(), h: await Sauv.empreinte() })); },
   async derniereDistante() {
     const r = await fetch('https://api.dropboxapi.com/2/files/list_folder', { method: 'POST', headers: { Authorization: 'Bearer ' + await Sauv.jeton(), 'Content-Type': 'application/json' }, body: JSON.stringify({ path: '' }) });

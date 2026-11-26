@@ -50,7 +50,8 @@ const Secu = {
       disciplines: D.disciplines, bareme: D.bareme || [], etablissements: D.etablissements.filter(e => e.manuel),
       reunions: perms.has('reu.voir') ? D.reunions : [], frais: D.frais.filter(f => f.userId === u.id || perms.has('frais.valider')),
       treso: perms.has('tres.voir') ? D.treso : null,
-      meta: { syndicat: D.meta.syndicat, elections: D.meta.elections, frais: D.meta.frais, exerciceDebutMois: D.meta.exerciceDebutMois, lockMinutes: D.meta.lockMinutes || 15, mailNational: D.meta.mailNational, mailsAcademies: D.meta.mailsAcademies, equipeLien: (D.meta.equipe || {}).lien || '', equipeDepot: (D.meta.equipe || {}).depot || '' }
+      sections: D.sections || [], national: D.national || null, dpe: D.dpe || null, validations: (D.validations || []).filter(v => v.par === u.id),
+      meta: { sectionsMaj: D.meta.sectionsMaj || null, syndicat: D.meta.syndicat, elections: D.meta.elections, frais: D.meta.frais, exerciceDebutMois: D.meta.exerciceDebutMois, lockMinutes: D.meta.lockMinutes || 15, mailNational: D.meta.mailNational, mailsAcademies: D.meta.mailsAcademies, equipeLien: (D.meta.equipe || {}).lien || '', equipeDepot: (D.meta.equipe || {}).depot || '' }
     };
   },
   async inviter(uidUser) {
@@ -126,6 +127,11 @@ const Secu = {
     inv.reunions.forEach(r => { const i = D.reunions.findIndex(x => x.id === r.id); if (i >= 0) D.reunions[i] = r; else D.reunions.push(r); });
     inv.frais.forEach(r => { const i = D.frais.findIndex(x => x.id === r.id); if (i >= 0) D.frais[i] = r; else D.frais.push(r); });
     if (inv.treso) D.treso = inv.treso;
+    if (inv.sections && inv.sections.length) D.sections = inv.sections;
+    if (inv.national) D.national = inv.national;
+    if (inv.dpe) D.dpe = inv.dpe;
+    D.validations = D.validations || [];
+    (inv.validations || []).forEach(v => { const i = D.validations.findIndex(x => x.id === v.id); if (i >= 0) D.validations[i] = v; else D.validations.push(v); });
     Object.assign(D.meta, inv.meta); D.meta.paquet = { date: inv.date, de: inv.de };
   },
 

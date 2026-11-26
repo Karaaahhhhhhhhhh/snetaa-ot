@@ -90,7 +90,8 @@ const Doublons = {
     ['emailInvalide', 'changementAcademie', 'autreAcademie', 'adresseInvalide', 'situationNat', 'aJourNat'].forEach(k => { if (!a[k] && b[k]) a[k] = b[k]; });
     a.extra = Object.assign({}, b.extra, a.extra);
     if (!a.militant && b.militant) a.militant = b.militant;
-    if (a.archive && !b.archive) a.archive = null;
+    if (a.archive && !b.archive && !a.radiation) a.archive = null;
+    if (b.radiation && !a.radiation) { a.radiation = b.radiation; a.archive = 'radiation'; }
     // références ailleurs dans la base
     D.reunions.forEach(r => r.participants.forEach(x => { if (x.pid === b.id) x.pid = a.id; }));
     D.reunions.forEach(r => { const vus = new Set(); r.participants = r.participants.filter(x => !x.pid || (vus.has(x.pid) ? false : vus.add(x.pid))); });

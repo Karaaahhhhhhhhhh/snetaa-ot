@@ -339,7 +339,7 @@ const Import = {
       } else {
         if (p.categorie !== 'adherent') p.categorie = 'adherent';
         if (o.etabVille) { const a = p.affectations.find(x => x.principal); if (a && !a.ville) a.ville = o.etabVille; }
-        p.absentImport = null; if (p.archive && p.archive !== 'manuel') p.archive = null;
+        p.absentImport = null; if (p.archive && p.archive !== 'manuel' && !p.radiation) p.archive = null;
         if (o.calendrier) p.calendrier = o.calendrier;
       }
       if (optCot) { o._cotisAll.forEach(c => { if (!p.cotisations.some(x => x.periode === c.periode)) p.cotisations.push(Object.assign({ id: uid() }, c)); }); P.syncCal(p); }
