@@ -161,3 +161,22 @@ td.num,th.num{text-align:right;white-space:nowrap}
 html,body{overflow-x:hidden;max-width:100%}
 .main,.card,.tablewrap{min-width:0;max-width:100%}
 .modal .mbody .tablewrap{max-width:100%}
+
+/* Mails & SMS types */
+.mo-bar{display:flex;flex-wrap:wrap;gap:1rem;align-items:flex-end;position:sticky;top:0;z-index:5}
+.mo-bar select{min-width:240px}
+.mo-h{margin:1.2rem 0 .4rem;display:flex;gap:.6rem;align-items:baseline}
+.mo-list{display:flex;flex-direction:column;gap:.35rem}
+.mo-item{background:#fff;border:1px solid var(--line);border-left:4px solid var(--violet);border-radius:8px}
+.mo-item.sms{border-left-color:var(--warn)}
+.mo-item>summary{list-style:none;display:flex;gap:.6rem;align-items:center;padding:.55rem .7rem;cursor:pointer}
+.mo-item>summary::-webkit-details-marker{display:none}
+.mo-item>summary:hover{background:#f7f9fc}
+.mo-t{display:flex;flex-direction:column;min-width:0;flex:1}
+.mo-t .small{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.mo-item[open] .mo-ouvrir{font-size:0}.mo-item[open] .mo-ouvrir::after{content:'fermer ▴';font-size:.8rem}
+.mo-ouvrir{color:var(--mut,#667);white-space:nowrap}
+.mo-body{padding:0 .7rem .7rem}
+.mo-var{background:#efe6f6;color:var(--violet);border-radius:4px;padding:0 .15rem;font-weight:600}
+.mo-vars{display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:.25rem .8rem;margin-top:.5rem}
+@media(max-width:700px){.mo-bar{position:static}.mo-bar select{min-width:0;width:100%}.mo-bar .f{width:100%}}

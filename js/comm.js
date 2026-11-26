@@ -56,14 +56,40 @@ const Comm = {
     }
     return t;
   },
+  /* ---------- Page « Mails & SMS types » : filtres + liste lisible ---------- */
+  f: (() => { try { return JSON.parse(localStorage.getItem('snetaa-modeles-filtre')) || {}; } catch (e) { return {}; } })(),
+  setF(k, v) { Comm.f[k] = v; try { localStorage.setItem('snetaa-modeles-filtre', JSON.stringify({ cat: Comm.f.cat || '', canal: Comm.f.canal || '' })); } catch (e) { } Comm.renderListe(); },
+  cats() { const c = Object.assign({}, Comm.CATS); D.modeles.forEach(m => { if (m.cat && !c[m.cat]) c[m.cat] = m.cat; }); return c; },
+  filtres() {
+    const f = Comm.f, q = norm(f.q || '');
+    return D.modeles.filter(m => (!f.cat || (m.cat || 'general') === f.cat) && (!f.canal || m.canal === f.canal) && (!q || norm(m.nom + ' ' + (m.objet || '') + ' ' + m.corps).includes(q)));
+  },
   page() {
-    const ed = can('com.modeles');
-    const cats = Object.assign({}, Comm.CATS); D.modeles.forEach(m => { if (m.cat && !cats[m.cat]) cats[m.cat] = m.cat; });
-    $('#main').innerHTML = `<div class="pagehead"><div><h1>Mails & SMS types</h1><div class="mut small">Variables disponibles : ${Comm.VARS.map(v => '<code>{' + v[0] + '}</code>').join(' ')}</div></div><div class="actions">${ed ? `<button class="btn sec" onclick="Comm.importer()">⇪ Importer des modèles</button> <button class="btn sec" onclick="Comm.exporter()">⇩ Exporter</button> <button class="btn" onclick="Comm.edit()">+ Nouveau modèle</button>` : ''}</div></div>
-      <div class="alert small">Pour envoyer : sélectionne des personnes dans le <a href="#/votants">cahier de votants</a>, le <a href="#/adherents">fichier adhérents</a> ou la page <a href="#/emargement">Qui a voté ?</a>, puis « Mail / SMS type ».</div>
-      ${Object.entries(cats).map(([c, l]) => { const ms = D.modeles.filter(m => (m.cat || 'general') === c); return ms.length ? `<h2>${l}</h2><div class="grid g2">${ms.map(m => `<div class="card"><div style="display:flex;gap:.5rem;align-items:center"><span class="tag ${m.canal === 'sms' ? 'w' : 'v'}">${m.canal === 'sms' ? 'SMS' : 'Mail'}</span><b>${esc(m.nom)}</b>
-        <span style="margin-left:auto">${ed ? `<button class="btn sm ghost" onclick="Comm.edit('${m.id}')">Modifier</button><button class="btn sm ghost" onclick="Comm.dupliquer('${m.id}')">Dupliquer</button><button class="btn sm ghost" onclick="Comm.suppr('${m.id}')">✕</button>` : ''}</span></div>
-        ${m.objet ? `<div class="small" style="margin:.4rem 0"><b>Objet :</b> ${esc(m.objet)}</div>` : ''}<div class="msg" style="max-height:150px">${esc(m.corps)}</div>${m.canal === 'sms' ? `<div class="small mut">${Comm.remplir(m.corps, null).length} caractères (≈ ${Math.ceil(Comm.remplir(m.corps, null).length / 160)} SMS)</div>` : ''}</div>`).join('')}</div>` : ''; }).join('')}`;
+    const ed = can('com.modeles'), f = Comm.f, cats = Comm.cats();
+    const nb = c => D.modeles.filter(m => (m.cat || 'general') === c && (!f.canal || m.canal === f.canal)).length;
+    $('#main').innerHTML = `<div class="pagehead"><div><h1>Mails & SMS types</h1><div class="mut small">${plural(D.modeles.length, 'modèle')} · pour envoyer : sélectionne des personnes dans le <a href="#/votants">cahier de votants</a>, le <a href="#/adherents">fichier adhérents</a> ou <a href="#/emargement">Qui a voté ?</a>, puis « Mail / SMS type ».</div></div>
+      <div class="actions">${ed ? `<button class="btn" onclick="Comm.edit()">+ Nouveau modèle</button> <button class="btn sec" onclick="Comm.importer()">⇪ Importer</button> <button class="btn sec" onclick="Comm.exporter(Comm.filtres().map(m=>m.id))" title="Exporte les modèles affichés">⇩ Exporter</button>` : ''}</div></div>
+      <div class="card mo-bar">
+        <div class="f" style="margin:0"><label>Rubrique</label><select id="mo_fcat" onchange="Comm.setF('cat',this.value)"><option value="">Toutes les rubriques</option>${Object.entries(cats).map(([c, l]) => `<option value="${c}" ${f.cat === c ? 'selected' : ''}>${esc(l)} (${nb(c)})</option>`).join('')}</select></div>
+        <div class="f" style="margin:0"><label>Type</label><div class="pill-select" id="mo_fcanal">${[['', 'Tous'], ['mail', '✉ Mails'], ['sms', '📱 SMS']].map(([v, l]) => `<button type="button" class="${(f.canal || '') === v ? 'on' : ''}" onclick="Comm.setF('canal','${v}');$$('#mo_fcanal button').forEach(b=>b.classList.toggle('on',b===this));Comm.majCompteurs()">${l}</button>`).join('')}</div></div>
+        <div class="f" style="margin:0;flex:1;min-width:180px"><label>Rechercher</label><input id="mo_fq" type="search" placeholder="mot du titre ou du texte…" value="${esc(f.q || '')}" oninput="Comm.setF('q',this.value)"></div>
+      </div>
+      <div id="mo_liste"></div>
+      <details class="card small"><summary><b>Variables utilisables dans les modèles</b> (remplacées automatiquement à l'envoi)</summary><div class="mo-vars">${Comm.VARS.map(v => `<div><code>{${v[0]}}</code> ${esc(v[1])}</div>`).join('')}</div></details>`;
+    Comm.renderListe();
+  },
+  majCompteurs() { const s = $('#mo_fcat'); if (!s) return; const v = s.value; const f = Comm.f, cats = Comm.cats(); s.innerHTML = `<option value="">Toutes les rubriques</option>` + Object.entries(cats).map(([c, l]) => `<option value="${c}">${esc(l)} (${D.modeles.filter(m => (m.cat || 'general') === c && (!f.canal || m.canal === f.canal)).length})</option>`).join(''); s.value = v; },
+  surligne(t) { return esc(t).replace(/\{(\w+)\}/g, '<span class="mo-var">{$1}</span>'); },
+  renderListe() {
+    const el = $('#mo_liste'); if (!el) return;
+    const ed = can('com.modeles'), cats = Comm.cats(), l = Comm.filtres();
+    if (!l.length) { el.innerHTML = `<div class="card mut">Aucun modèle pour ce choix. ${Comm.f.cat || Comm.f.canal || Comm.f.q ? `<a href="#" onclick="Comm.f={};Comm.setF('q','');App.route();return false">Tout afficher</a>` : ''}</div>`; return; }
+    const groupes = Comm.f.cat ? [[Comm.f.cat, l]] : Object.keys(cats).map(c => [c, l.filter(m => (m.cat || 'general') === c)]).filter(g => g[1].length);
+    el.innerHTML = groupes.map(([c, ms]) => `<h2 class="mo-h">${esc(cats[c] || c)} <span class="mut small">${plural(ms.length, 'modèle')}</span></h2>
+      <div class="mo-list">${ms.map(m => { const sms = m.canal === 'sms', n = sms ? Comm.remplir(m.corps, null).length : 0, apercu = String(m.corps || '').replace(/^Bonjour \{prenom\},?\s*/i, '').replace(/\s+/g, ' ').slice(0, 140);
+        return `<details class="mo-item ${sms ? 'sms' : 'mail'}"><summary><span class="tag ${sms ? 'w' : 'v'}">${sms ? '📱 SMS' : '✉ Mail'}</span><span class="mo-t"><b>${esc(m.nom)}</b><span class="small mut">${sms ? `${n} car. · ${Math.ceil(n / 160) || 1} SMS — ` : (m.objet ? esc(m.objet) + ' — ' : '')}${esc(apercu)}…</span></span><span class="mo-ouvrir small">voir ▾</span></summary>
+        <div class="mo-body">${m.objet ? `<div class="small"><b>Objet :</b> ${Comm.surligne(m.objet)}</div>` : ''}<div class="msg" style="max-height:none">${Comm.surligne(m.corps)}</div>
+        <div class="actions" style="margin-top:.5rem"><button class="btn sm sec" onclick="Comm.copier('${m.id}')">Copier le texte</button>${ed ? ` <button class="btn sm ghost" onclick="Comm.edit('${m.id}')">Modifier</button> <button class="btn sm ghost" onclick="Comm.dupliquer('${m.id}')">Dupliquer</button> <button class="btn sm ghost" onclick="Comm.suppr('${m.id}')">Supprimer</button>` : ''}</div></div></details>`; }).join('')}</div>`).join('');
   },
   edit(id) {
     const m = id ? D.modeles.find(x => x.id === id) : { canal: 'mail', cat: 'elections', nom: '', objet: '[SNETAA-FO] ', corps: 'Bonjour {prenom},\n\n\n\nBien syndicalement,\n\n{signature}' };
@@ -73,7 +99,7 @@ const Comm = {
       [{ label: 'Annuler' }, { label: 'Enregistrer', onClick: md => { Object.assign(m, { nom: md.querySelector('#mo_n').value || 'Sans titre', canal: md.querySelector('#mo_c').value, cat: md.querySelector('#mo_cat').value, objet: md.querySelector('#mo_o').value, corps: md.querySelector('#mo_t').value }); if (!id) { m.id = uid(); D.modeles.push(m); } save(); log('Modèle enregistré', m.nom); App.route(); } }], { wide: true });
   },
   /* ---------- Import / export de modèles ---------- */
-  CATS: { elections: 'Élections', adhesion: 'Adhésion & fichier', reunions: 'Réunions & instances', info: 'Information des collègues', militants: 'Messages aux militants', general: 'Général' },
+  CATS: { elections: 'Élections', adhesion: 'Adhésion & relances', reunions: 'Réunions & instances', info: 'Information des collègues', militants: 'Messages aux militants', general: 'Général' },
   exporter(ids) {
     const l = D.modeles.filter(m => !ids || ids.includes(m.id)).map(m => ({ id: m.id, canal: m.canal, cat: m.cat, nom: m.nom, objet: m.objet || '', corps: m.corps }));
     download('modeles_SNETAA-FO_' + todayISO() + '.json', JSON.stringify({ type: 'snetaa-modeles', version: 1, date: nowISO(), modeles: l }, null, 2), 'application/json');
@@ -135,6 +161,7 @@ Bonjour {prenom},
           if (i >= 0 && !keep) D.modeles[i] = m; else { if (i >= 0) { m.id = uid(); m.nom += ' (importé)'; } D.modeles.push(m); } n++; });
         save(); log('Modèles importés', n + ' modèle(s)'); UI.toast(n + ' modèle(s) importé(s)', 'g'); App.route(); } }], { wide: true });
   },
+  copier(id) { const m = D.modeles.find(x => x.id === id); if (m) copyText((m.objet ? m.objet + '\n\n' : '') + m.corps); },
   dupliquer(id) { const m = D.modeles.find(x => x.id === id); D.modeles.push(Object.assign({}, m, { id: uid(), nom: m.nom + ' (copie)' })); save(); App.route(); },
   async suppr(id) { if (!await UI.confirm('Supprimer ce modèle ?', 'Supprimer')) return; D.modeles = D.modeles.filter(x => x.id !== id); save(); App.route(); },
 
@@ -153,7 +180,7 @@ Bonjour {prenom},
     const cible = st.canal === 'sms' ? avecTel : avecMail;
     const ex = cible[0] || ps[0];
     const html = `${UI.tabs('cmtab', [['mail', `Mail (${avecMail.length})`], ['sms', `SMS (${avecTel.length})`]], st.canal, '(k=>{Comm.st.canal=k;Comm.st.mo=(D.modeles.find(m=>m.canal===k)||{}).id;Comm.renderEnvoi()})')}
-      <div class="frow"><div class="f"><label>Modèle</label><select onchange="Comm.st.mo=this.value;Comm.renderEnvoi()">${UI.opts(D.modeles.filter(m => m.canal === st.canal).map(m => [m.id, m.nom]), st.mo)}</select></div></div>
+      <div class="frow"><div class="f"><label>Modèle</label><select onchange="Comm.st.mo=this.value;Comm.renderEnvoi()">${Object.entries(Comm.cats()).map(([c, l]) => { const ms = D.modeles.filter(m => m.canal === st.canal && (m.cat || 'general') === c); return ms.length ? `<optgroup label="${esc(l)}">${ms.map(m => `<option value="${m.id}" ${m.id === st.mo ? 'selected' : ''}>${esc(m.nom)}</option>`).join('')}</optgroup>` : ''; }).join('')}</select></div></div>
       <p class="small">${plural(ps.length, 'personne')} sélectionnée(s), <b>${cible.length}</b> joignable(s) par ${st.canal === 'sms' ? 'SMS (portable connu)' : 'mail (adresse valide)'}.${ps.length - cible.length ? ` <span class="mut">${ps.length - cible.length} sans ${st.canal === 'sms' ? 'portable' : 'mail valide'}.</span>` : ''}</p>
       ${Pubs.liste().filter(x => x.url && x.categorie !== 'Bulletin d\'adhésion').length ? `<details ${(st.pubs || []).length ? 'open' : ''}><summary><b>Ajouter des liens vers des publications</b> (${(st.pubs || []).length} choisie(s))</summary><div style="max-height:160px;overflow:auto;margin:.4rem 0">${Pubs.liste().filter(x => x.url && x.categorie !== 'Bulletin d\'adhésion').sort((a, b) => (b.epingle ? 1 : 0) - (a.epingle ? 1 : 0) || ((a.date || '') < (b.date || '') ? 1 : -1)).map(x => `<label class="chk"><input type="checkbox" ${(st.pubs || []).includes(x.id) ? 'checked' : ''} onchange="Comm.st.pubs=Comm.st.pubs||[];this.checked?Comm.st.pubs.push('${x.id}'):Comm.st.pubs.splice(Comm.st.pubs.indexOf('${x.id}'),1);Comm.renderEnvoi()"> ${x.epingle ? '📌 ' : ''}${esc(x.titre)} <span class="small mut">${fmtDate(x.date)}</span></label>`).join('')}</div></details>` : ''}
       <h3>Aperçu pour ${esc(ex ? P.full(ex) : '')}</h3>${mo.objet && st.canal === 'mail' ? `<div class="small"><b>Objet :</b> ${esc(Comm.remplir(mo.objet, ex))}</div>` : ''}<div class="msg">${esc(Comm.corps(ex))}</div>
