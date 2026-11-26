@@ -63,56 +63,86 @@ const VIDEOS_REF = [
   ['ISl8mMBO-uk', "Contractuels – assez de la précarité !"]
 ];
 const Videos = {
-  CHAINE: 'https://www.youtube.com/@fnecfp-fo8651/videos',
-  // vidéos les plus utiles pour les collègues de la voie professionnelle
+  /* Sources : vidéos FNEC FP-FO, vidéos SNETAA-FO, podcast « La Revue de Presse des PLP » */
+  SOURCES: {
+    fnec: { nom: 'Vidéos FNEC FP-FO', court: 'FNEC FP-FO', lien: 'https://www.youtube.com/@fnecfp-fo8651/videos', type: 'video' },
+    snetaa: { nom: 'Vidéos SNETAA-FO', court: 'SNETAA-FO', lien: 'https://www.youtube.com/@SNETAA-FO/videos', type: 'video' },
+    rdp: { nom: 'Podcast « La Revue de Presse des PLP »', court: 'Podcast RDP des PLP', lien: 'https://www.snetaa.org/podcast-la-revue-de-presse-des-plp/', type: 'podcast' }
+  },
+  // vidéos FNEC FP-FO les plus utiles pour les collègues de la voie professionnelle
   PRIO: ['rSdTIPRtKps', '9tQQNZUGYQU', 'SSQYJHDGF1c', 'snGNr8PH75Y', 'ozvXSzwVrcY', 'It5zF_p0X8Q', 'fIlLbO5n6I0', 'L63d2roLjsM', 'ISl8mMBO-uk', 'jFtXmSz4CfU', 'Lh8ozu5k41E', 'RRoRoMLYm-Q', 'YEl7cPkZIfY', 'zYOzVo63wRg', 'Dk0QoG2Q7K0', 'odpk0iIN2Rw', '0e7AlGZGlkQ', 'GDZoGOBlaGE', 'uyiGW3AgfBI', '9Txn1lYhpdM'],
-  THEMES: [
-    ['vote', 'Élections & vote', /qui vote|votre vote|capn/i],
-    ['precarite', 'Contractuels, AED, AESH', /contractuel|aesh|aed\b|atpss/i],
-    ['salaires', 'Salaires, statut, protection sociale', /salaire|statut|psc|action sociale|retraite|smicard/i],
-    ['travail', 'Conditions de travail, santé, VSS', /santé et sécurité|vss/i],
-    ['ecole', 'École publique & enseignement', /laïcité|militarisation|enseignement spécialisé|professeurs des écoles|privé sous contrat/i],
-    ['autres', 'Autres personnels et services', /./]
-  ],
-  theme(t) { return Videos.THEMES.find(x => x[2].test(t))[0]; },
-  liste() { return VIDEOS_REF.map(([id, titre], i) => ({ id, titre, rang: i, url: 'https://youtu.be/' + id, prio: Videos.PRIO.includes(id), theme: Videos.theme(titre) })); },
+  THEMES: {
+    fnec: [
+      ['vote', 'Élections & vote', /qui vote|votre vote|capn/i],
+      ['precarite', 'Contractuels, AED, AESH', /contractuel|aesh|aed\b|atpss/i],
+      ['salaires', 'Salaires, statut, protection sociale', /salaire|statut|psc|action sociale|retraite|smicard/i],
+      ['travail', 'Conditions de travail, santé, VSS', /santé et sécurité|vss/i],
+      ['ecole', 'École publique & enseignement', /laïcité|militarisation|enseignement spécialisé|professeurs des écoles|privé sous contrat/i],
+      ['autres', 'Autres personnels et services', /./]
+    ],
+    snetaa: [
+      ['vote', 'Élections professionnelles', /élection|election|votez|vote snetaa/i],
+      ['greve', 'Grèves & mobilisations', /grève|mobilis/i],
+      ['reforme', 'Réforme & avenir de la voie pro', /réforme|voie pro|parcours en y|bac pro|filière|enseignement professionnel|lycée pro|lycées pro|formation professionnelle|apprenti|affectation/i],
+      ['metier', 'Métier, violences, conditions de travail', /violence|agression|profs|enseigner|sanitaire|fournitures|philo|école/i],
+      ['autres', 'Vie du syndicat & divers', /./]
+    ],
+    rdp: null // regroupé par saison
+  },
+  src: 'fnec',
+  theme(src, t) { return (Videos.THEMES[src] || []).find(x => x[2].test(t))[0]; },
+  liste(src) {
+    src = src || Videos.src;
+    if (src === 'rdp') return (typeof PODCASTS_RDP_REF !== 'undefined' ? PODCASTS_RDP_REF : []).map(([titre, slug, saison], i) => ({ id: 'rdp' + i, titre, rang: i, url: 'https://podcasters.spotify.com/pod/show/snetaa/episodes/' + slug, theme: saison, src }));
+    const l = src === 'snetaa' ? (typeof VIDEOS_SNETAA_REF !== 'undefined' ? VIDEOS_SNETAA_REF : []) : VIDEOS_REF;
+    return l.map(([id, titre], i) => ({ id, titre, rang: i, url: 'https://youtu.be/' + id, prio: src === 'fnec' && Videos.PRIO.includes(id), theme: Videos.theme(src, titre), src }));
+  },
+  groupes(src) { if (src === 'rdp') { const g = []; Videos.liste('rdp').forEach(v => { if (!g.some(x => x[0] === v.theme)) g.push([v.theme, 'Saison ' + v.theme]); }); return g; } return Videos.THEMES[src].map(t => [t[0], t[1]]); },
   f: { q: '', th: '', prio: false },
-  sel: new Set(),
-  texte(v) { return v.titre + ' — vidéo FNEC FP-FO : ' + v.url; },
+  sel: new Map(),
+  texte(v) { return v.titre + ' — ' + (v.src === 'rdp' ? 'podcast du SNETAA-FO' : 'vidéo ' + Videos.SOURCES[v.src].court) + ' : ' + v.url; },
+  choisir(src) { Videos.src = src; Videos.f = { q: '', th: '', prio: false }; Videos.page(); },
   page() {
-    const f = Videos.f;
-    $('#main').innerHTML = `<div class="pagehead"><div><h1>Vidéos FNEC FP-FO</h1><div class="mut small">${VIDEOS_REF.length} vidéos de la chaîne YouTube de la fédération, prêtes à partager (WhatsApp, SMS, mail). <a href="${Videos.CHAINE}" target="_blank" rel="noopener">Voir la chaîne</a></div></div></div>
+    const f = Videos.f, src = Videos.src, S = Videos.SOURCES[src], tous = Videos.liste(src), pod = S.type === 'podcast';
+    $('#main').innerHTML = `<div class="pagehead"><div><h1>Vidéos & podcasts</h1><div class="mut small">Liens publics prêts à partager (WhatsApp, SMS, mail). <a href="${S.lien}" target="_blank" rel="noopener">Ouvrir la source</a></div></div></div>
+      <div class="pill-select vi-src">${Object.entries(Videos.SOURCES).map(([k, x]) => `<button type="button" class="${k === src ? 'on' : ''}" onclick="Videos.choisir('${k}')">${x.type === 'podcast' ? '🎧' : '▶'} ${esc(x.court)} <span class="mut">(${Videos.liste(k).length})</span></button>`).join('')}</div>
       <div class="card mo-bar">
-        <div class="f" style="margin:0"><label>Thème</label><select onchange="Videos.f.th=this.value;Videos.render()"><option value="">Tous les thèmes</option>${Videos.THEMES.map(t => `<option value="${t[0]}" ${f.th === t[0] ? 'selected' : ''}>${t[1]} (${Videos.liste().filter(v => v.theme === t[0]).length})</option>`).join('')}</select></div>
-        <div class="f" style="margin:0"><label>Sélection</label><div class="pill-select"><button type="button" class="${f.prio ? '' : 'on'}" onclick="Videos.f.prio=false;Videos.page()">Toutes</button><button type="button" class="${f.prio ? 'on' : ''}" onclick="Videos.f.prio=true;Videos.page()">⭐ Utiles pour nos collègues</button></div></div>
-        <div class="f" style="margin:0;flex:1;min-width:180px"><label>Rechercher</label><input type="search" placeholder="AESH, salaires, PSC…" value="${esc(f.q)}" oninput="Videos.f.q=this.value;Videos.render()"></div>
+        <div class="f" style="margin:0"><label>${pod ? 'Saison' : 'Thème'}</label><select onchange="Videos.f.th=this.value;Videos.render()"><option value="">${pod ? 'Toutes les saisons' : 'Tous les thèmes'}</option>${Videos.groupes(src).map(t => `<option value="${t[0]}" ${f.th === t[0] ? 'selected' : ''}>${esc(t[1])} (${tous.filter(v => v.theme === t[0]).length})</option>`).join('')}</select></div>
+        ${src === 'fnec' ? `<div class="f" style="margin:0"><label>Sélection</label><div class="pill-select"><button type="button" class="${f.prio ? '' : 'on'}" onclick="Videos.f.prio=false;Videos.page()">Toutes</button><button type="button" class="${f.prio ? 'on' : ''}" onclick="Videos.f.prio=true;Videos.page()">⭐ Utiles pour nos collègues</button></div></div>` : ''}
+        <div class="f" style="margin:0;flex:1;min-width:180px"><label>Rechercher</label><input type="search" placeholder="${pod ? 'date, numéro…' : 'AESH, réforme, salaires…'}" value="${esc(f.q)}" oninput="Videos.f.q=this.value;Videos.render()"></div>
       </div>
       <div id="vi_sel" class="alert small" style="display:none"></div>
-      <div id="vi_liste" class="vi-grid"></div>`;
+      <div id="vi_liste" class="${pod ? 'vi-pods' : 'vi-grid'}"></div>`;
     Videos.render();
   },
   render() {
     const f = Videos.f, q = norm(f.q), el = $('#vi_liste'); if (!el) return;
-    const l = Videos.liste().filter(v => (!f.th || v.theme === f.th) && (!f.prio || v.prio) && (!q || norm(v.titre).includes(q)));
-    el.innerHTML = l.map(v => `<div class="vi-card"><a href="${v.url}" target="_blank" rel="noopener" class="vi-img"><img loading="lazy" src="https://i.ytimg.com/vi/${v.id}/mqdefault.jpg" alt=""><span>▶</span></a>
-      <div class="vi-b"><div class="vi-top"><label class="small" title="Ajouter à la sélection à partager"><input type="checkbox" ${Videos.sel.has(v.id) ? 'checked' : ''} onchange="Videos.cocher('${v.id}',this.checked)"> sélectionner</label>${v.prio ? '<span class="tag v">⭐ utile</span>' : ''}</div><b>${esc(v.titre)}</b>
-      <div class="vi-act"><button class="btn sm sec" onclick="Videos.partager(['${v.id}'],'copier')">Copier le lien</button><button class="btn sm ghost" onclick="Videos.partager(['${v.id}'],'whatsapp')">WhatsApp</button><button class="btn sm ghost" onclick="Videos.partager(['${v.id}'],'sms')">SMS</button><button class="btn sm ghost" onclick="Videos.partager(['${v.id}'],'mail')">Mail</button></div></div></div>`).join('') || '<div class="card mut">Aucune vidéo pour ce choix.</div>';
+    const src = Videos.src, pod = src === 'rdp';
+    const l = Videos.liste(src).filter(v => (!f.th || v.theme === f.th) && (!f.prio || v.prio) && (!q || norm(v.titre).includes(q)));
+    const chk = v => `<label class="small" title="Ajouter à la sélection à partager"><input type="checkbox" ${Videos.sel.has(v.src + ':' + v.id) ? 'checked' : ''} onchange="Videos.cocher('${v.src}','${v.id}',this.checked)"> sélectionner</label>`;
+    const act = v => `<div class="vi-act"><button class="btn sm sec" onclick="Videos.partager([['${v.src}','${v.id}']],'copier')">Copier le lien</button><button class="btn sm ghost" onclick="Videos.partager([['${v.src}','${v.id}']],'whatsapp')">WhatsApp</button><button class="btn sm ghost" onclick="Videos.partager([['${v.src}','${v.id}']],'sms')">SMS</button><button class="btn sm ghost" onclick="Videos.partager([['${v.src}','${v.id}']],'mail')">Mail</button></div>`;
+    el.innerHTML = l.map(v => pod
+      ? `<div class="vi-pod"><a href="${v.url}" target="_blank" rel="noopener" class="vi-pl" title="Écouter">🎧</a><div class="vi-b"><div class="vi-top"><b>${esc(v.titre)}</b>${chk(v)}</div><div class="small mut">Saison ${esc(v.theme)}</div>${act(v)}</div></div>`
+      : `<div class="vi-card"><a href="${v.url}" target="_blank" rel="noopener" class="vi-img"><img loading="lazy" src="https://i.ytimg.com/vi/${v.id}/mqdefault.jpg" alt=""><span>▶</span></a>
+      <div class="vi-b"><div class="vi-top">${chk(v)}${v.prio ? '<span class="tag v">⭐ utile</span>' : ''}</div><b>${esc(v.titre)}</b>${act(v)}</div></div>`).join('') || '<div class="card mut">Rien pour ce choix.</div>';
     Videos.majSel();
   },
-  cocher(id, on) { on ? Videos.sel.add(id) : Videos.sel.delete(id); Videos.majSel(); },
+  cocher(src, id, on) { const k = src + ':' + id; on ? Videos.sel.set(k, [src, id]) : Videos.sel.delete(k); Videos.majSel(); },
   majSel() {
     const b = $('#vi_sel'); if (!b) return; const n = Videos.sel.size;
     b.style.display = n ? '' : 'none';
-    b.innerHTML = `<b>${plural(n, 'vidéo sélectionnée', 'vidéos sélectionnées')}</b> — partager ensemble : <button class="btn sm" onclick="Videos.partager([...Videos.sel],'copier')">Copier</button> <button class="btn sm sec" onclick="Videos.partager([...Videos.sel],'whatsapp')">WhatsApp</button> <button class="btn sm sec" onclick="Videos.partager([...Videos.sel],'mail')">Mail</button> <a href="#" onclick="Videos.sel.clear();Videos.render();return false">vider</a>`;
+    b.innerHTML = `<b>${plural(n, 'lien sélectionné', 'liens sélectionnés')}</b> (toutes sources confondues) — partager ensemble : <button class="btn sm" onclick="Videos.partager([...Videos.sel.values()],'copier')">Copier</button> <button class="btn sm sec" onclick="Videos.partager([...Videos.sel.values()],'whatsapp')">WhatsApp</button> <button class="btn sm sec" onclick="Videos.partager([...Videos.sel.values()],'mail')">Mail</button> <a href="#" onclick="Videos.sel.clear();Videos.render();return false">vider</a>`;
   },
-  partager(ids, canal) {
-    const vs = Videos.liste().filter(v => ids.includes(v.id)); if (!vs.length) return;
-    const corps = vs.length === 1 ? Videos.texte(vs[0]) : 'Vidéos de la FNEC FP-FO à voir et à partager :\n\n' + vs.map(v => '▶ ' + v.titre + '\n' + v.url).join('\n\n');
+  trouver(src, id) { return Videos.liste(src).find(v => v.id === id); },
+  partager(refs, canal) {
+    const vs = refs.map(([s, id]) => Videos.trouver(s, id)).filter(Boolean); if (!vs.length) return;
+    const quoi = vs.every(v => v.src === 'rdp') ? 'Podcasts du SNETAA-FO' : vs.every(v => v.src === 'fnec') ? 'Vidéos de la FNEC FP-FO' : vs.every(v => v.src === 'snetaa') ? 'Vidéos du SNETAA-FO' : 'Vidéos et podcasts FO';
+    const corps = vs.length === 1 ? Videos.texte(vs[0]) : quoi + ' à voir, à écouter et à partager :\n\n' + vs.map(v => (v.src === 'rdp' ? '🎧 ' : '▶ ') + v.titre + '\n' + v.url).join('\n\n');
     if (canal === 'copier') return copyText(corps);
     if (canal === 'whatsapp') return window.open('https://wa.me/?text=' + encodeURIComponent(corps), '_blank');
     if (canal === 'sms') { location.href = 'sms:?&body=' + encodeURIComponent(corps); return; }
     if (canal === 'mail') {
-      const objet = '[SNETAA-FO] ' + (vs.length === 1 ? 'Vidéo : ' + vs[0].titre : 'Vidéos de la FNEC FP-FO');
+      const objet = '[SNETAA-FO] ' + (vs.length === 1 ? (vs[0].src === 'rdp' ? 'Podcast : ' : 'Vidéo : ') + vs[0].titre : quoi);
       location.href = 'mailto:?subject=' + encodeURIComponent(objet) + '&body=' + encodeURIComponent('Bonjour,\n\n' + corps + '\n\nBien syndicalement,\n\n' + ((D.meta.syndicat || {}).signature || ''));
     }
   }

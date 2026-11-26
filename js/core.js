@@ -3,7 +3,7 @@
    Noyau : données, référentiels, comptes, droits, navigation
    ========================================================= */
 'use strict';
-const APP_VERSION = '2026-11-26 n°30';
+const APP_VERSION = '2026-11-26 n°31';
 
 /* ---------- Utilitaires ---------- */
 const $ = (s, r = document) => r.querySelector(s);
@@ -470,7 +470,7 @@ const UI = {
     n.push(['modeles', 'Mails & SMS types', '✎', 'com.envoyer', 'Communication']);
     n.push(['journaux', 'La Lettre (journal)', '🗞', null, 'Communication']);
     n.push(['publications', 'Publications & adhésion', '📰', 'com.envoyer', 'Communication']);
-    n.push(['videos', 'Vidéos FNEC FP-FO', '▶', 'com.envoyer', 'Communication']);
+    n.push(['videos', 'Vidéos & podcasts', '▶', 'com.envoyer', 'Communication']);
     n.push(['reunions', 'Réunions & présences', '◷', 'reu.voir', 'Vie syndicale']);
     n.push(['mandats', 'Mandats S1 / S2 / S3', '★', 'adh.voir', 'Vie syndicale']);
     n.push(['agenda', 'Agenda & congés scolaires', '📅', null, 'Vie syndicale']);
