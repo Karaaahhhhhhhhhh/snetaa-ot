@@ -185,7 +185,7 @@ function applyAuto(f,dep){
   const ps=f.pieces.filter(p=>p.depId===dep.id);
   dep.repas=(dep.repas||[]).filter(m=>m.manuel||(m.pieceId&&ps.some(p=>p.id===m.pieceId&&p.type==="restaurant")));
   if(!dep.auto)return;
-  const sum=(type,sens)=>r2(ps.filter(p=>p.type===type&&(p.sens||"aller")===sens).reduce((a,p)=>a+n(p.montant),0));
+  const sum=(type,sens)=>r2(ps.filter(p=>p.type===type&&((p.sens==="retour")===(sens==="retour"))).reduce((a,p)=>a+n(p.montant),0));
   if(ps.some(p=>p.type==="peage")){dep.peageA=sum("peage","aller");dep.peageR=sum("peage","retour")}
   if(ps.some(p=>p.type==="parking")){dep.parkA=sum("parking","aller");dep.parkR=sum("parking","retour")}
   ps.filter(p=>p.type==="restaurant").forEach(p=>{const ex=dep.repas.find(m=>m.pieceId===p.id);if(ex)ex.montant=n(p.montant);else dep.repas.push({id:"r"+uid(),pieceId:p.id,montant:n(p.montant)})});
@@ -693,7 +693,7 @@ function pieceCard(p,f,ref){
   return `<article class="card piece ${un?"unassigned":""}">
     <button class="img" data-act="editPiece" data-id="${p.id}" aria-label="Modifier le justificatif">${imgTag(p.imgId,TYPES[p.type])}</button>
     <div class="body">
-      <div class="meta"><span class="ref">${ref[p.id]}</span><span class="chip acc">${esc(TYPES[p.type]||"Autre")}</span>${p.type==="peage"||p.type==="parking"?`<span class="chip">${p.sens==="retour"?"retour":"aller"}</span>`:""}${p.needsCheck?`<span class="chip warn">à vérifier</span>`:""}${p.doublon?`<span class="chip bad" title="Même date, heure et montant qu'un autre justificatif">doublon ?</span>`:""}<span class="amt">${p.montant!=null&&p.montant!==""?eur(p.montant):""}</span></div>
+      <div class="meta"><span class="ref">${ref[p.id]}</span><span class="chip acc">${esc(TYPES[p.type]||"Autre")}</span>${(p.type==="peage"||p.type==="parking")&&p.sens!=="na"?`<span class="chip">${p.sens==="retour"?"retour":"aller"}</span>`:""}${p.needsCheck?`<span class="chip warn">à vérifier</span>`:""}${p.doublon?`<span class="chip bad" title="Même date, heure et montant qu'un autre justificatif">doublon ?</span>`:""}<span class="amt">${p.montant!=null&&p.montant!==""?eur(p.montant):""}</span></div>
       <div class="when">${p.date?fdate(p.date):"date ?"}${p.heure?" · "+esc(p.heure):""}</div>
       <div class="desc">${esc(p.resume||p.emetteur||"")}</div>
       <select data-assign="${p.id}" aria-label="Déplacement">${depOptions(f,isAssigned(p,f)?p.depId:"")}</select>
@@ -1198,7 +1198,7 @@ async function ingest(files,preDep){
 }
 function mkPiece(a,srcId,corners,imgId,extra={}){
   const type=TYPES[a.type]?a.type:"autre";const heure=okTime(a.heure);
-  const p={id:"p"+uid(),srcId,corners,rot:0,enhance:true,imgId,type,date:okDate(a.date),heure,montant:a.montant==null||a.montant===""?"":r2(n(a.montant)),emetteur:String(a.emetteur||""),lieu:"",resume:String(a.resume||""),motif:a.motif?String(a.motif):"",sens:guessSens(heure),depId:"",
+  const p={id:"p"+uid(),srcId,corners,rot:0,enhance:true,imgId,type,date:okDate(a.date),heure,montant:a.montant==null||a.montant===""?"":r2(n(a.montant)),emetteur:String(a.emetteur||""),lieu:"",resume:String(a.resume||""),motif:a.motif?String(a.motif):"",sens:type==="parking"?"na":guessSens(heure),depId:"",
     needsCheck:!okDate(a.date)||(type!=="convocation"&&(a.montant==null||a.montant===""))||type==="autre",addedAt:Date.now()};
   return Object.assign(p,extra);
 }
@@ -1334,7 +1334,7 @@ async function openEditor(pid){
           <label class="f c6"><span>Heure</span><input type="time" id="edHeure" value="${esc(p.heure)}"></label>
           <label class="f c12"><span>Description</span><input type="text" id="edResume" value="${esc(p.resume)}"></label>
           <label class="f c6"><span>Émetteur</span><input type="text" id="edEmet" value="${esc(p.emetteur)}"></label>
-          <label class="f c6"><span>Trajet</span><select id="edSens">${selOpts([["aller","Aller"],["retour","Retour"]],p.sens||"aller")}</select></label>
+          <label class="f c6"><span>Trajet</span><select id="edSens">${selOpts([["na","—  (ni aller ni retour)"],["aller","Aller"],["retour","Retour"]],p.sens||"aller")}</select></label>
           <label class="f c12"><span>Déplacement</span><select id="edDep">${depOptions(f,isAssigned(p,f)?p.depId:"")}</select></label>
         </div></fieldset>
         ${lk?"":`<div class="row" style="justify-content:space-between"><button class="btn sm ghost danger" data-ed="askDel">Supprimer</button><button class="btn" data-ed="save">Enregistrer</button></div>`}
