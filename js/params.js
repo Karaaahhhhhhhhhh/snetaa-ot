@@ -169,15 +169,29 @@ const Carte = {
     const admin = Carte.fondsAdmin(); let actifs = [];
     try { actifs = JSON.parse(localStorage.getItem('snetaa-fonds-admin') || '["Départements"]'); } catch (x) { }
     Object.entries(admin).forEach(([k, l]) => { if (actifs.includes(k)) l.addTo(Carte.map); });
-    L.control.layers(fonds, admin, { position: 'topright', collapsed: window.innerWidth < 700 }).addTo(Carte.map);
+    Carte.ctl = L.control.layers(fonds, admin, { position: 'topright', collapsed: window.innerWidth < 700 }).addTo(Carte.map);
     Carte.map.on('baselayerchange', e => { try { localStorage.setItem('snetaa-fond', e.name); } catch (x) { } });
     const memo = () => { try { localStorage.setItem('snetaa-fonds-admin', JSON.stringify(Object.keys(admin).filter(k => Carte.map.hasLayer(admin[k])))); } catch (x) { } };
     Carte.map.on('overlayadd overlayremove', memo);
     Carte.layer = L.layerGroup().addTo(Carte.map);
-    Carte.draw(); Carte.majTrajet();
+    Carte.lieuxLayer = L.layerGroup(); const kL = 'Lieux de réunion · UD et UL FO';
+    let lieuxOn = true; try { const st = localStorage.getItem('snetaa-fonds-admin'); if (st && localStorage.getItem('snetaa-lieux-vu')) lieuxOn = JSON.parse(st).includes(kL); localStorage.setItem('snetaa-lieux-vu', '1'); } catch (x) { }
+    admin[kL] = Carte.lieuxLayer; Carte.ctl.addOverlay(Carte.lieuxLayer, kL); if (lieuxOn) Carte.lieuxLayer.addTo(Carte.map);
+    Carte.draw(); Carte.majTrajet(); Carte.drawLieux();
     if (sansGeo && navigator.onLine !== false) setTimeout(() => Carte.localiser(true), 300);
   },
   drawDeb: debounce(() => Carte.draw(), 250),
+  async drawLieux() {
+    if (!Carte.lieuxLayer || typeof ReuDocs === 'undefined') return; Carte.lieuxLayer.clearLayers(); let maj = false;
+    for (const l of ReuDocs.lieux()) {
+      if (!l.lat && navigator.onLine !== false) { try { const g = await Geo.geocode([l.adresse, l.cp, l.ville].filter(Boolean).join(' ')); if (g && g.lat) { l.lat = g.lat; l.lon = g.lon; maj = true; } } catch (e) { } }
+      if (!l.lat) continue;
+      const fo = /FO/.test(l.categorie || ''), ud = /UD/.test(l.categorie || '');
+      const ic = L.divIcon({ className: 'lieu-mk', html: `<span class="lieu-pin ${fo ? (ud ? 'ud' : 'ul') : 'reu'}">${fo ? (ud ? 'UD' : 'UL') : '★'}</span>`, iconSize: [30, 30], iconAnchor: [15, 15] });
+      L.marker([l.lat, l.lon], { icon: ic, zIndexOffset: 500 }).bindPopup(`<b>${esc(l.nom)}</b>${l.categorie ? '<br><span class="small mut">' + esc(l.categorie) + '</span>' : ''}<br>${esc([l.adresse, l.cp, l.ville].filter(Boolean).join(', '))}${l.note ? '<br><i class="small">' + esc(l.note) + '</i>' : ''}`).addTo(Carte.lieuxLayer);
+    }
+    if (maj) save();
+  },
   draw() {
     if (!Carte.layer) return; Carte.layer.clearLayers();
     const cnt = Etabs.compte(); const pts = [];
@@ -241,12 +255,26 @@ App.routes.carte = () => Carte.page();
 /* ---------- Utilisateurs & droits ---------- */
 const Users = {
   page() {
-    $('#main').innerHTML = `<div class="pagehead"><div><h1>Utilisateurs & droits</h1><div class="mut small">Les droits sont accordés selon la fonction (S3, S2, S1, trésorier) : désigne la personne dans « Mandats », puis ouvre son accès dans l'onglet « Accès & droits » de sa fiche, où tu peux aussi ajuster ses droits.</div></div><div class="actions"><button class="btn sec" onclick="Users.edit()">+ Compte sans fiche</button></div></div>
+    $('#main').innerHTML = `<div class="pagehead"><div><h1>Utilisateurs & droits</h1><div class="mut small">Les droits sont accordés selon la fonction (S3, S2, S1, trésorier) : désigne la personne dans « Mandats », puis ouvre son accès dans l'onglet « Accès & droits » de sa fiche, où tu peux aussi ajuster ses droits.</div></div><div class="actions"><button class="btn" onclick="Users.exterieur()">+ Membre extérieur (ex. SNETAA national)</button><button class="btn sec" onclick="Users.edit()">+ Compte sans fiche</button></div></div>
       <div class="tablewrap"><table><thead><tr><th>Nom</th><th>Droits accordés par</th><th>Contact</th><th>Périmètre</th><th>Actif</th></tr></thead><tbody>${D.users.map(u => `<tr class="click" onclick="${u.pid ? `Adh.tab='acces';App.go('fiche/${u.pid}')` : `Users.edit('${u.id}')`}"><td><b>${esc(u.prenom + ' ' + u.nom)}</b>${u.id === ME.id ? ' <span class="tag">vous</span>' : ''}${u.pid ? '' : ' <span class="tag w" title="Compte non relié à une fiche : ses mandats ne lui donnent pas de droits">sans fiche</span>'}</td><td>${esc(Droits.libelle(u))}</td><td class="small">${esc([u.email, u.tel].filter(Boolean).join(' · '))}</td><td class="small">${esc([...Droits.perimetre(u).deps.map(d => 'dép. ' + d), Droits.perimetre(u).etabs.length ? (Droits.perimetre(u).etabs.length + ' établissement(s)') : ''].filter(Boolean).join(', ') || (Droits.perms(u).has('adh.voir_tout') ? 'tout' : 'ses contacts'))}</td><td>${u.actif !== false ? '✔' : '—'}</td></tr>`).join('')}</tbody></table></div>
       <h2>Rôles et droits</h2><p class="small mut">Coche les droits de chaque rôle. L'administrateur principal a toujours tous les droits.</p>
       <div class="tablewrap"><table><thead><tr><th>Droit</th>${Object.entries(D.roles).map(([k, r]) => `<th class="small" style="white-space:normal;min-width:90px">${esc(r.label)}</th>`).join('')}</tr></thead><tbody>
       ${PERMS.map(([k, l, g], i) => `${i === 0 || PERMS[i - 1][2] !== g ? `<tr><th colspan="${Object.keys(D.roles).length + 1}">${esc(g)}</th></tr>` : ''}<tr><td class="small">${esc(l)}</td>${Object.entries(D.roles).map(([rk, r]) => `<td style="text-align:center"><input type="checkbox" ${r.perms.includes(k) ? 'checked' : ''} ${r.locked ? 'disabled' : ''} onchange="Users.perm('${rk}','${k}',this.checked)"></td>`).join('')}</tr>`).join('')}</tbody></table></div>
       <p><button class="btn sec" onclick="Users.nouveauRole()">+ Nouveau rôle</button></p>`;
+  },
+  /* Membre extérieur à l'académie (ex. secrétaire du SNETAA national) : fiche « Membre extérieur », hors adhérents, votes et relances ; accès et droits comme pour les autres */
+  exterieur() {
+    UI.modal('Nouveau membre extérieur', `<p class="small mut">Pour donner un accès à une personne qui n'est pas adhérente de l'académie (membre du SNETAA national, camarade d'une autre académie…). Sa fiche n'apparaît ni dans le cahier de votants, ni dans les relances de cotisation. Tu choisis ensuite ses droits et tu lui envoies l'invitation, comme pour les autres.</p>
+      <div class="frow"><div class="f"><label>Civilité</label><select id="x_civ">${UI.opts([['M.', 'M.'], ['Mme', 'Mme']], 'M.')}</select></div><div class="f"><label>Prénom</label><input id="x_p"></div><div class="f"><label>Nom</label><input id="x_n"></div></div>
+      <div class="frow"><div class="f"><label>Fonction</label><input id="x_f" placeholder="Secrétaire national" list="x_fl"><datalist id="x_fl"><option value="Secrétaire général"><option value="Secrétaire national"><option value="Membre du Bureau national"><option value="Référent technique national"><option value="Secrétaire académique"></datalist></div><div class="f"><label>Organisation</label><input id="x_o" value="SNETAA-FO national"></div></div>
+      <div class="frow"><div class="f"><label>Courriel</label><input id="x_m" type="email"></div><div class="f"><label>Portable</label><input id="x_t" inputmode="tel"></div><div class="f"><label>Date de naissance (vérification à la 1re connexion)</label><input id="x_d" type="date"></div></div>`,
+      [{ label: 'Annuler' }, { label: 'Créer la fiche', onClick: m => {
+        const g = s => m.querySelector(s).value.trim(); if (!g('#x_n') || !g('#x_p')) { UI.toast('Prénom et nom obligatoires', 'r'); return false; }
+        const p = P.nouveau({ categorie: 'externe', academie: '', civilite: g('#x_civ'), prenom: cap(g('#x_p')), nom: g('#x_n').toUpperCase(), email: g('#x_m'), telPortable: normPhone(g('#x_t')), dateNaissance: g('#x_d'), fonctionExterieure: g('#x_f'), organisation: g('#x_o'), notes: [g('#x_f'), g('#x_o')].filter(Boolean).join(' – '), ajoutManuel: false });
+        D.personnes.push(p); save(); log('Membre extérieur créé', P.full(p) + (g('#x_f') ? ' (' + g('#x_f') + ')' : ''));
+        if (typeof ReuDocs !== 'undefined' && /national/i.test(g('#x_o')) && !ReuDocs.nationaux().some(x => norm(x.nom) === norm(p.nom) && norm(x.prenom) === norm(p.prenom))) { ReuDocs.nationaux().push({ id: uid(), prenom: p.prenom, nom: p.nom, fonction: g('#x_f') || 'Secrétaire national', mail: p.email }); save(); }
+        Adh.tab = 'acces'; App.go('fiche/' + p.id); UI.toast('Fiche créée : « Ouvrir un accès », coche ses droits, puis envoie l’invitation', 'g');
+      } }], { wide: true });
   },
   perm(r, k, on) { const p = D.roles[r].perms; if (on && !p.includes(k)) p.push(k); if (!on) D.roles[r].perms = p.filter(x => x !== k); save(); log('Droits modifiés', D.roles[r].label + ' : ' + k + (on ? ' +' : ' −')); },
   async nouveauRole() { const n = await UI.prompt('Nouveau rôle', 'Nom du rôle :'); if (!n) return; D.roles['r' + uid()] = { label: n, perms: ['adh.voir', 'vot.voir'] }; save(); App.route(); },

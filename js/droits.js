@@ -44,7 +44,7 @@ const Droits = {
       <div class="kv"><div>Fonctions donnant des droits</div><div>${fonctions.map(m => `<span class="tag v">${esc(Mandats.libelle(m))}</span>`).join(' ') || '<span class="mut">aucune (désigne la personne dans l\'onglet Mandats)</span>'}</div></div>`;
     if (!u) {
       const libres = D.users.filter(x => !x.pid);
-      h += `<p style="margin-top:1rem"><button class="btn" onclick="Droits.militant('${p.id}')">🗳 Désigner comme militant (élections)</button> <button class="btn sec" onclick="Droits.creer('${p.id}')">✉ Ouvrir un accès (invitation sécurisée)</button></p>
+      h += `<p style="margin-top:1rem">${p.categorie === 'externe' ? '' : `<button class="btn" onclick="Droits.militant('${p.id}')">🗳 Désigner comme militant (élections)</button> `}<button class="btn sec" onclick="Droits.creer('${p.id}')">✉ Ouvrir un accès (invitation sécurisée)</button></p>
         <p class="small mut">« Militant » : la personne apparaît dans la répartition des électeurs à contacter. Elle peut travailler sur papier (listes imprimées), avec un paquet militant, ou sur son téléphone si tu lui envoies ensuite une invitation.</p><p>
         ${libres.length ? ` ou relier un compte existant : <select id="dr_lien" style="width:auto">${UI.opts(libres.map(x => [x.id, x.prenom + ' ' + x.nom]), '', '—')}</select> <button class="btn sm sec" onclick="Droits.relier('${p.id}')">Relier</button>` : ''}</p></div>`;
       return h;
@@ -67,7 +67,7 @@ const Droits = {
     if (!p.dateNaissance && !await UI.confirm('La date de naissance n\'est pas renseignée sur la fiche : elle sert de question de vérification à la première connexion. Continuer sans ?', 'Continuer')) return;
     const u = { id: uid(), pid, prenom: p.prenom, nom: p.nom, email: p.email, tel: p.telPortable, role: 'aucun', salt: '', pin: '', actif: true, perimetre: { etabs: [], deps: [] }, permsPlus: [], permsMoins: [], created: nowISO() };
     D.users.push(u); save(); log('Accès créé', P.full(p) + ' (' + Droits.libelle(u) + ')'); UI.renderNav();
-    App.route(); Secu.inviter(u.id);
+    App.route(); if (p.categorie === 'externe') UI.toast('Accès créé : coche ses droits ci-dessous, puis « Envoyer une invitation »', 'g'); else Secu.inviter(u.id);
   },
   /* désigner un militant : compte sans code (pas de connexion tant qu'aucune invitation n'est activée) */
   militant(pid) {

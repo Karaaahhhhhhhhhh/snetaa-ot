@@ -5,7 +5,7 @@
 'use strict';
 const Votants = {
   /* Les retraités ne votent pas aux élections professionnelles : ils sont exclus du cahier de votants */
-  ep(p) { return !p.archive && p.statut !== 'RETR'; },
+  ep(p) { return !p.archive && p.statut !== 'RETR' && p.categorie !== 'externe'; },
   vis() { return P.visibles().filter(Votants.ep); },
   f: { q: '', cat: '', int: '', mil: '', etab: '', dep: '', contact: '', vote: '', lim: 300 },
   lastContact(p) { const c = p.vote.contacts; return c.length ? c.reduce((a, b) => (a.date || '') > (b.date || '') ? a : b) : null; },

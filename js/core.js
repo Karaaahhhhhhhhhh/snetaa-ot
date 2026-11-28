@@ -3,7 +3,7 @@
    Noyau : données, référentiels, comptes, droits, navigation
    ========================================================= */
 'use strict';
-const APP_VERSION = '2026-11-26 n°38';
+const APP_VERSION = '2026-11-28 n°39';
 
 /* ---------- Utilitaires ---------- */
 const $ = (s, r = document) => r.querySelector(s);
@@ -146,7 +146,7 @@ async function readJSONMaybeEncrypted(file) {
 
 /* ---------- Référentiels ---------- */
 const REF = {
-  categories: { adherent: 'Adhérent', sympathisant: 'Sympathisant', contact: 'Contact' },
+  categories: { adherent: 'Adhérent', sympathisant: 'Sympathisant', contact: 'Contact', externe: 'Membre extérieur (national, autre académie)' },
   statuts: [
     ['PLP', 'Professeur de lycée professionnel (PLP)', 1], ['PLP_STAG', 'PLP stagiaire', 1], ['CERT', 'Professeur certifié', 1], ['AGREG', 'Professeur agrégé', 1],
     ['CONTR', 'Professeur contractuel', 1], ['PE', 'Professeur des écoles (ULIS, SEGPA…)', 1], ['DDFPT', 'DDFPT', 0], ['CPE', 'CPE', 0], ['AED', 'AED (assistant d\'éducation)', 0],

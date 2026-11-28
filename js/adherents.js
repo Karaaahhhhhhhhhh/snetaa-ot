@@ -32,7 +32,7 @@ const Adh = {
   },
   /* à faire adhérer : sympathisants et contacts actifs, anciens adhérents et adhérents en retard (hors retraités, décédés, refus) */
   refusAdhesion(id, v) { const p = P.get(id); p.refusAdhesion = v ? todayISO() : null; P.touch(p); save(); log(v ? 'Ne souhaite pas adhérer' : 'Remis dans « À faire adhérer »', P.full(p)); UI.toast(v ? 'Retiré de la liste « À faire adhérer »' : 'Remis dans la liste « À faire adhérer »', 'g'); App.route(); },
-  cibleAdhesion(p) { return !p.archive && p.statut !== 'RETR' && !p.refusAdhesion && (p.categorie === 'sympathisant' || p.categorie === 'contact' || (p.categorie === 'adherent' && ['ancien', 'retard'].includes(P.cotis(p)))); },
+  cibleAdhesion(p) { return !p.archive && p.statut !== 'RETR' && !p.refusAdhesion && p.categorie !== 'externe' && (p.categorie === 'sympathisant' || p.categorie === 'contact' || (p.categorie === 'adherent' && ['ancien', 'retard'].includes(P.cotis(p)))); },
   estMilitant(p) { return Mandats.de(p).length > 0 || !!Adh.acces(p); },
   fonctionOk(p, f) {
     const t = Mandats.de(p).map(m => m.type), a = Adh.acces(p);
@@ -212,7 +212,7 @@ const Adh = {
         ${can('adh.modifier') ? `<button class="btn" onclick="Adh.edit('${p.id}')">Modifier</button>` : ''}
         ${p.email && can('com.envoyer') ? `<button class="btn sec" onclick="Comm.envoyerSelection(['${p.id}'],'mail')">✉ Mail</button>` : ''}
         ${tel && can('com.envoyer') ? `<button class="btn sec" onclick="Comm.envoyerSelection(['${p.id}'],'sms')">SMS</button><a class="btn sec" href="tel:${esc(phoneIntl(tel))}">☎ Appeler</a>` : ''}
-        ${can('com.envoyer') && p.statut !== 'RETR' && (p.categorie !== 'adherent' || ['ancien', 'retard'].includes(P.cotis(p))) ? `<button class="btn ok" onclick="Comm.envoyerSelection(['${p.id}'],null,'adhesion')">Proposer l'adhésion</button>` : ''}
+        ${can('com.envoyer') && p.statut !== 'RETR' && p.categorie !== 'externe' && (p.categorie !== 'adherent' || ['ancien', 'retard'].includes(P.cotis(p))) ? `<button class="btn ok" onclick="Comm.envoyerSelection(['${p.id}'],null,'adhesion')">Proposer l'adhésion</button>` : ''}
         ${can('adh.modifier') ? `<button class="btn sec" onclick="Adh.intervention('${p.id}')">+ Intervention</button><button class="btn sec" onclick="Adh.importMessage('${p.id}')">⇩ Archiver un message</button><button class="btn sec" onclick="Adh.menu('${p.id}')">Autres actions ▾</button>` : ''}
       </div></div></div>${Valid.bandeau(p)}`;
     const tabs = [['id', 'Identité & affectation'], ['cotis', 'Adhésion & cotisations'], ['mand', `Mandats (${Mandats.de(p).length})`], ['hist', `Historique (${p.interventions.length + p.messages.length})`], ['mut', `Mutations (${(p.mutations || []).length})`], ['vote', 'Élections'], ['reu', 'Réunions'], ['nat', 'Fichier national']];

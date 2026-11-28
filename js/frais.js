@@ -173,24 +173,35 @@ function trajetTxt(d){
 /* Numérotation des pièces : par déplacement (ordre chronologique), puis autres frais, puis non affectées */
 function pieceOrder(f){
   const out=[];const byTime=(a,b)=>((a.date||"")+(a.heure||"")).localeCompare((b.date||"")+(b.heure||""));
-  sortedDeps(f).forEach(d=>f.pieces.filter(p=>p.depId===d.id).sort(byTime).forEach(p=>out.push(p)));
-  f.pieces.filter(p=>p.depId==="autres").sort(byTime).forEach(p=>out.push(p));
-  f.pieces.filter(p=>!p.depId||(p.depId!=="autres"&&!f.deps.some(d=>d.id===p.depId))).sort(byTime).forEach(p=>out.push(p));
+  sortedDeps(f).forEach(d=>f.pieces.filter(p=>principal(p,f)===d.id).sort(byTime).forEach(p=>out.push(p)));
+  f.pieces.filter(p=>principal(p,f)==="autres").sort(byTime).forEach(p=>out.push(p));
+  f.pieces.filter(p=>!isAssigned(p,f)).sort(byTime).forEach(p=>out.push(p));
   const ref={};out.forEach((p,i)=>ref[p.id]="J"+(i+1));return{list:out,ref};
 }
-const isAssigned=(p,f)=>p.depId==="autres"||f.deps.some(d=>d.id===p.depId);
+/* Une pièce peut justifier plusieurs déplacements : rattachement principal (depId), « sert aussi pour » (liens),
+   et pour un relevé (péage du mois…) chaque ligne retenue est rattachée au déplacement de même date. */
+const lignesOk=p=>(p.lignes||[]).filter(l=>l.ok!==false&&l.depId);
+const lie=(p,d)=>p.depId===d.id||(p.liens||[]).includes(d.id)||lignesOk(p).some(l=>l.depId===d.id);
+const piecesDe=(f,d)=>f.pieces.filter(p=>lie(p,d));
+const principal=(p,f)=>p.depId||((lignesOk(p).find(l=>f.deps.some(d=>d.id===l.depId))||{}).depId)||((p.liens||[]).find(id=>f.deps.some(d=>d.id===id)))||"";
+const isAssigned=(p,f)=>{const k=principal(p,f);return k==="autres"||f.deps.some(d=>d.id===k)};
+function assignReleves(f){
+  f.pieces.forEach(p=>{if(!p.lignes)return;p.lignes.forEach(l=>{if(l.manuel)return;const d=l.date&&f.deps.find(x=>x.date===l.date);l.depId=d?d.id:"";l.ok=!!d})});
+}
 /* Report automatique des montants des justificatifs vers le déplacement */
 function applyAuto(f,dep){
   if(!dep)return;
-  const ps=f.pieces.filter(p=>p.depId===dep.id);
+  const ps=f.pieces.filter(p=>p.depId===dep.id&&!p.releve);
+  const rl=[];f.pieces.forEach(p=>lignesOk(p).filter(l=>l.depId===dep.id).forEach(l=>rl.push(Object.assign({type:p.type},l))));
   dep.repas=(dep.repas||[]).filter(m=>m.manuel||(m.pieceId&&ps.some(p=>p.id===m.pieceId&&p.type==="restaurant")));
   if(!dep.auto)return;
-  const sum=(type,sens)=>r2(ps.filter(p=>p.type===type&&((p.sens==="retour")===(sens==="retour"))).reduce((a,p)=>a+n(p.montant),0));
-  if(ps.some(p=>p.type==="peage")){dep.peageA=sum("peage","aller");dep.peageR=sum("peage","retour")}
-  if(ps.some(p=>p.type==="parking")){dep.parkA=sum("parking","aller");dep.parkR=sum("parking","retour")}
+  const all=ps.concat(rl);
+  const sum=(type,sens)=>r2(all.filter(p=>p.type===type&&((p.sens==="retour")===(sens==="retour"))).reduce((a,p)=>a+n(p.montant),0));
+  if(all.some(p=>p.type==="peage")){dep.peageA=sum("peage","aller");dep.peageR=sum("peage","retour")}
+  if(all.some(p=>p.type==="parking")){dep.parkA=sum("parking","aller");dep.parkR=sum("parking","retour")}
   ps.filter(p=>p.type==="restaurant").forEach(p=>{const ex=dep.repas.find(m=>m.pieceId===p.id);if(ex)ex.montant=n(p.montant);else dep.repas.push({id:"r"+uid(),pieceId:p.id,montant:n(p.montant)})});
 }
-function applyAutoAll(f){f.deps.forEach(d=>applyAuto(f,d))}
+function applyAutoAll(f){assignReleves(f);f.deps.forEach(d=>applyAuto(f,d))}
 function guessSens(heure){if(!heure)return "aller";const h=parseInt(heure.split(":")[0],10);return h<13?"aller":"retour"}
 
 /* ============ Photos (IndexedDB de cet appareil) ============ */
@@ -200,7 +211,7 @@ const Store={idb:null,urls:new Map(),_mem:null,
   idbOp(store,mode,fn){return new Promise((res,rej)=>{if(!this.idb)return res(undefined);const tx=this.idb.transaction(store,mode);const s=tx.objectStore(store);const r=fn(s);tx.oncomplete=()=>res(r&&r.result);tx.onerror=()=>rej(tx.error)})},
   async putImage(blob){const id="L"+uid();await this.idbOp("blobs","readwrite",s=>s.put(blob,id));if(!this.idb)this._mem=(this._mem||new Map()).set(id,blob);this.urls.set(id,URL.createObjectURL(blob));return id},
   url(id){if(!id)return "";if(this.urls.has(id))return this.urls.get(id);
-    if(!this._loading)this._loading=new Set();if(!this._loading.has(id)){this._loading.add(id);this.idbOp("blobs","readonly",s=>s.get(id)).then(b=>{if(b){this.urls.set(id,URL.createObjectURL(b));document.querySelectorAll('img[data-img="'+id+'"]').forEach(i=>{i.src=this.urls.get(id);i.classList.remove("absent")})}else document.querySelectorAll('img[data-img="'+id+'"]').forEach(i=>i.classList.add("absent"))}).catch(()=>{})}
+    if(!this._loading)this._loading=new Set();if(!this._loading.has(id)){this._loading.add(id);this.init().then(()=>this.idbOp("blobs","readonly",s=>s.get(id))).then(b=>{if(!b&&this._mem&&this._mem.get(id))b=this._mem.get(id);if(!b){this._loading.delete(id);document.querySelectorAll('img[data-img="'+id+'"]').forEach(i=>{i.alt="Photo absente de cet appareil";i.classList.add("absent")});return}if(b){this.urls.set(id,URL.createObjectURL(b));document.querySelectorAll('img[data-img="'+id+'"]').forEach(i=>{i.src=this.urls.get(id);i.classList.remove("absent")})}else document.querySelectorAll('img[data-img="'+id+'"]').forEach(i=>i.classList.add("absent"))}).catch(()=>{})}
     return "data:image/gif;base64,R0lGODlhAQABAAAAACw=";},
   async blob(id){const b=await this.idbOp("blobs","readonly",s=>s.get(id));if(b)return b;if(this._mem&&this._mem.get(id))return this._mem.get(id);throw new Error("photo absente de cet appareil")},
   async has(id){try{await this.blob(id);return true}catch(_){return false}},
@@ -318,12 +329,14 @@ let pdfjsP=null;
 function getPdfjs(){if(!pdfjsP)pdfjsP=(async()=>{await runLib("pdfjs");window.pdfjsLib.GlobalWorkerOptions.workerSrc=absUrl(LIB+"pdf.worker.min.js");return window.pdfjsLib})().catch(e=>{pdfjsP=null;throw e});return pdfjsP}
 async function pdfToCanvases(file,maxPages=6){
   const lib=await getPdfjs();const doc=await lib.getDocument({data:new Uint8Array(await file.arrayBuffer())}).promise;
-  const out=[];let text="";
+  const out=[];let text="";const lignesPdf=[];
   for(let i=1;i<=Math.min(doc.numPages,maxPages);i++){const pg=await doc.getPage(i);
-    if(i===1){try{const tc=await pg.getTextContent();text=tc.items.map(it=>it.str+(it.hasEOL?"\n":" ")).join("")}catch(_){}}
-    const vp0=pg.getViewport({scale:1});const sc=Math.min(2.2,1800/Math.max(vp0.width,vp0.height));const vp=pg.getViewport({scale:sc});
+    const vp0=pg.getViewport({scale:1});
+    try{const tc=await pg.getTextContent();const t=tc.items.map(it=>it.str+(it.hasEOL?"\n":" ")).join("");text+=(text?"\n":"")+t;
+      const rows=[];tc.items.forEach(it=>{if(!it.str.trim())return;const x=it.transform[4],yb=it.transform[5],h=Math.abs(it.transform[3])||it.height||8;let r=rows.find(r=>Math.abs(r.y-yb)<h*.5);if(!r){r={y:yb,h,its:[]};rows.push(r)}r.its.push({x,w:it.width,s:it.str})});
+      rows.forEach(r=>{r.its.sort((a,b)=>a.x-b.x);const x0=r.its[0].x,x1=Math.max(...r.its.map(a=>a.x+a.w));lignesPdf.push({t:r.its.map(a=>a.s).join(" "),pg:i-1,b:[x0/vp0.width,1-(r.y+r.h)/vp0.height,x1/vp0.width,1-(r.y-r.h*.25)/vp0.height]})})}catch(_){}const sc=Math.min(2.2,1800/Math.max(vp0.width,vp0.height));const vp=pg.getViewport({scale:sc});
     const c=document.createElement("canvas");c.width=Math.round(vp.width);c.height=Math.round(vp.height);const x=c.getContext("2d",{willReadFrequently:true});x.fillStyle="#fff";x.fillRect(0,0,c.width,c.height);await pg.render({canvasContext:x,viewport:vp}).promise;out.push(c)}
-  return{pages:out,total:doc.numPages,text};
+  return{pages:out,total:doc.numPages,text,lignes:lignesPdf};
 }
 
 /* ============ Lecture des textes (OCR Tesseract, en local) ============ */
@@ -353,12 +366,30 @@ async function ocrBest(warped,upd){
   const axis=textAxis(warped);const cands=axis?[1,3]:[0,2];
   let worker=null;try{if(!ocrP)upd&&upd("préparation de la lecture des textes…");worker=await getOcr()}catch(e){console.warn(e);return{rot:cands[0],text:"",ok:false}}
   const base=scaled(warped,1400);let best=null;
-  const tryRot=async r=>{const res=await worker.recognize(rotCanvas(base,r));const sc=ocrScore(res.data);if(!best||sc>best.sc)best={rot:r,sc,text:res.data.text||""};return sc};
+  const tryRot=async r=>{const rc=rotCanvas(base,r);const res=await worker.recognize(rc);const sc=ocrScore(res.data);if(!best||sc>best.sc)best={rot:r,sc,text:res.data.text||"",lines:lignesOcr(res.data,rc.width,rc.height)};return sc};
   for(const r of cands){const sc=await tryRot(r);if(r===cands[0]&&sc>=72)break}
   // sens des lignes mal deviné : on essaie les deux autres orientations
   if(best.sc<55){upd&&upd("recherche du sens de lecture…");for(const r of (axis?[0,2]:[1,3])){const sc=await tryRot(r);if(sc>=72)break}}
-  return{rot:best.rot,text:best.text,ok:true,score:best.sc};
+  return{rot:best.rot,text:best.text,lines:best.lines,ok:true,score:best.sc};
 }
+function lignesOcr(data,W,H){const L=data.lines||[].concat(...(data.blocks||[]).map(b=>[].concat(...(b.paragraphs||[]).map(p=>p.lines||[]))));
+  return L.map(l=>({t:l.text||"",b:l.bbox?[l.bbox.x0/W,l.bbox.y0/H,l.bbox.x1/W,l.bbox.y1/H]:null}))}
+async function ocrLignes(canvas){try{const w=await getOcr();const c=scaled(canvas,1800);const r=await w.recognize(c);return{text:r.data.text||"",lines:lignesOcr(r.data,c.width,c.height)}}catch(e){console.warn(e);return{text:"",lines:[]}}}
+/* Relevé (télépéage du mois, relevé de parking…) : plusieurs lignes « date … montant ». On garde chaque ligne avec sa position. */
+function releveLignes(lines){
+  const out=[];const rxD=/(\d{1,2})[\/.\-](\d{1,2})[\/.\-](\d{2,4})/;
+  (lines||[]).forEach((L,i)=>{const t=typeof L==="string"?L:L.t;const u=normTxt(t);const md=u.match(rxD);if(!md)return;
+    const am=[...u.replace(rxD,"").matchAll(/(-?\d{1,4})\s?[,.]\s?(\d{2})(?!\d)(?!\s?%)/g)];if(!am.length)return;
+    let y=+md[3];if(y<100)y+=2000;const iso=okDate(`${y}-${String(+md[2]).padStart(2,"0")}-${String(+md[1]).padStart(2,"0")}`);if(!iso)return;
+    const v=parseFloat(am[am.length-1][1]+"."+am[am.length-1][2]);if(!(v>0&&v<500))return;
+    const hm=u.match(/\b([01]?\d|2[0-3])\s?[:H]\s?([0-5]\d)\b/);const heure=hm?okTime(hm[1].padStart(2,"0")+":"+hm[2]):"";
+    const lib=t.replace(rxD,"").replace(/(-?\d{1,4})\s?[,.]\s?(\d{2})(?!\d).*$/,"").replace(/\b([01]?\d|2[0-3])\s?[:H]\s?([0-5]\d)\b/,"").replace(/\s{2,}/g," ").trim().slice(0,60);
+    out.push({id:"l"+uid(),date:iso,heure,montant:r2(v),libelle:lib,sens:guessSens(heure),b:typeof L==="string"?null:L.b,pg:L.pg||0,depId:"",ok:false})});
+  return out.length>=3&&new Set(out.map(l=>l.date)).size>=2?out:null;
+}
+function faireReleve(pc,lignes){pc.releve=true;pc.lignes=lignes;if(pc.type==="autre")pc.type="peage";
+  const ds=lignes.map(l=>l.date).sort();pc.periodeReleve=[ds[0],ds[ds.length-1]];pc.montant=r2(lignes.reduce((a,l)=>a+l.montant,0));pc.date="";pc.heure="";pc.sens="na";
+  pc.resume="Relevé "+(TYPES[pc.type]||"").toLowerCase()+(pc.emetteur?" – "+pc.emetteur:"")+" du "+fdate(ds[0])+" au "+fdate(ds[ds.length-1]);pc.needsCheck=false;return pc}
 async function ocrPlain(canvas){try{const w=await getOcr();const r=await w.recognize(scaled(canvas,1800));return r.data.text||""}catch(e){console.warn(e);return ""}}
 
 /* ============ Analyse du texte : type, date, heure, montant ============ */
@@ -697,13 +728,30 @@ function repasHtml(f,d){
 }
 function viewDeps(){
   const f=cur(),c=ficheCalc(f),deps=sortedDeps(f),lk=locked(f);
+  if(!st.open){st.open=new Set();if(deps.length===1)st.open.add(deps[0].id)}
   const cards=deps.map((d,i)=>{
-    const dc=depCalc(d,f);const ps=f.pieces.filter(x=>x.depId===d.id);const ref=pieceOrder(f).ref;
+    const dc=depCalc(d,f);const ps=piecesDe(f,d);const ref=pieceOrder(f).ref;
     if(d.mode!=="hab")rebuildLegs(d);
-    return `<article class="card fr-dep" data-dep="${d.id}">
-      <div class="dep-head"><span class="dep-no">D${i+1}</span><div class="dep-title">${esc(motifTxt(d)||"Nouveau déplacement")}<div class="small mut">${d.date?fdate(d.date):"Date à préciser"}${d.reunionId?" · réunion":""}</div></div>
-      ${ps.length?`<span class="chip ok">${ps.length} justificatif${ps.length>1?"s":""}</span>`:`<span class="chip warn">sans justificatif</span>`}
-      <span class="dep-total" data-total="${d.id}">${eur(dc.total)}</span></div>
+    const open=st.open.has(d.id);const conv=ps.some(x=>x.type==="convocation");const nChk=ps.filter(x=>x.needsCheck&&!x.releve).length;
+    const reu=d.reunionId&&(D.reunions||[]).find(r=>r.id===d.reunionId);
+    const nRep=(d.repas||[]).length,mRep=dc.repas;
+    const cell=(lab,val,cls)=>`<span class="dsum-c ${cls}"><i>${lab}</i><b>${val}</b></span>`;
+    const sum=`<button type="button" class="dsum" data-act="toggleDep" data-id="${d.id}" aria-expanded="${open}">
+        <span class="dsum-no">${open?"▾":"▸"} D${i+1}</span>
+        ${cell("Date",d.date?fdate(d.date):"à préciser",d.date?"":"ko")}
+        <span class="dsum-c dsum-m"><i>Motif</i><b>${esc(motifTxt(d)||"à choisir")}</b></span>
+        ${cell("Km",d.passager?"passager":(dc.kmBrut?kmTxt(dc.km):"à saisir"),d.passager||dc.kmBrut?"":"ko")}
+        ${cell("Péage",n(d.peageA)+n(d.peageR)?eur(n(d.peageA)+n(d.peageR)):"—",n(d.peageA)+n(d.peageR)?"ok":"vide")}
+        ${cell("Parking",n(d.parkA)+n(d.parkR)?eur(n(d.parkA)+n(d.parkR)):"—",n(d.parkA)+n(d.parkR)?"ok":"vide")}
+        ${cell("Repas",nRep?nRep+" · "+eur(mRep):"—",nRep?"ok":"vide")}
+        ${cell("Convocation",conv?"✓ jointe":"✗ manquante",conv?"ok":"ko")}
+        ${nChk?cell("Tickets",nChk+" à vérifier","warn"):cell("Tickets",ps.filter(x=>x.type!=="convocation").length||"—",ps.filter(x=>x.type!=="convocation").length?"ok":"vide")}
+        <span class="dsum-t num" data-total="${d.id}">${eur(dc.total)}</span></button>`;
+    return `<article class="card fr-dep ${open?"open":""}" data-dep="${d.id}">
+      <div class="dsum-row">${sum}<button type="button" class="btn sm ghost danger dsum-del" data-act="askDelDep" data-id="${d.id}" title="Supprimer ce déplacement" aria-label="Supprimer D${i+1}">✕</button></div>
+      <div data-confirm="${d.id}"></div>
+      ${open?`<div class="dep-body">
+      ${conv?"":`<div class="fr-notice bad"><b>Convocation ou mail manquant.</b> Chaque déplacement doit être justifié (convocation, mail d'invitation, ordre du jour…) : sans elle, la trésorière ne peut pas le valider. ${reu?`<button class="btn sm" data-act="convReu" data-id="${d.id}">Joindre la convocation de « ${esc(reu.titre||reu.type||"la réunion")} »</button>`:`<button class="btn sm" data-act="addFor" data-id="${d.id}">${ICON.up}Joindre la convocation</button>`}</div>`}
       <div class="fr-grid">
         <label class="f c3"><span>Date</span><input type="date" data-bind="dep.${d.id}.date" value="${esc(d.date)}"></label>
         <label class="f ${d.motif==="Autre"?"c4":"c9"}"><span>Motif</span><select data-bind="dep.${d.id}.motif" data-rerender>${selOpts(motifsList(),d.motif,"Choisir le motif…")}</select></label>
@@ -724,13 +772,14 @@ function viewDeps(){
         <button class="addthumb" data-act="addFor" data-id="${d.id}">${ICON.up}Ajouter</button><button class="addthumb" data-act="camFor" data-id="${d.id}">${ICON.cam}Photo</button></div></div>
       <div class="row" style="justify-content:flex-end"><button class="btn sm ghost" data-act="dupDep" data-id="${d.id}">Dupliquer</button><button class="btn sm ghost danger" data-act="askDelDep" data-id="${d.id}">Supprimer</button></div>
       <div data-confirm="${d.id}"></div>
+      </div>`:""}
     </article>`}).join("");
   const ps=f.pieces.filter(x=>x.depId==="autres");const ref=pieceOrder(f).ref;
   return `${rappelHtml()}${f.statut==="corriger"?`<div class="fr-notice"><b>À corriger</b> (trésorerie) : ${esc(f.commentaire||"voir avec la trésorière")}</div>`:""}
   ${lk?`<div class="fr-notice info">Fiche ${STATUTS[f.statut][0].toLowerCase()} : elle n'est plus modifiable.${f.statut==="envoyee"?` <button class="btn sm" data-act="unsend">Repasser en brouillon</button>`:""}</div>`:""}
   ${summaryBar(f,c)}
   <fieldset class="fr-fs" ${lk?"disabled":""}>
-  <div class="section-head"><div><div class="eyebrow">${esc(f.titre)}${periode(f)?" · "+esc(periode(f)):""}</div><h2>Déplacements</h2></div><button class="btn" data-act="addDep">+ Ajouter un déplacement</button></div>
+  <div class="section-head"><div><div class="eyebrow">${esc(f.titre)}${periode(f)?" · "+esc(periode(f)):""}</div><h2>Déplacements (${deps.length})</h2></div><div class="row"><button class="btn sm sec" data-act="openAll">Tout déplier</button><button class="btn sm sec" data-act="closeAll">Tout replier</button><button class="btn" data-act="addDep">+ Ajouter un déplacement</button></div></div>
   <div class="stack">${cards||`<div class="fr-empty"><b>Aucun déplacement pour l'instant</b>Ajoute un déplacement, déclare une réunion, ou numérise tes justificatifs : les déplacements sont créés d'après leurs dates.</div>`}</div>
   <div class="section-head" style="margin-top:26px"><h2>Autres frais</h2><span class="dep-total num" data-total="autres">${eur(c.autres)}</span></div>
   <article class="card fr-dep"><div class="fr-grid">
@@ -750,16 +799,19 @@ function pieceCard(p,f,ref){
     <button class="img" data-act="editPiece" data-id="${p.id}" aria-label="Modifier le justificatif">${imgTag(p.imgId,TYPES[p.type])}</button>
     <div class="body">
       <div class="meta"><span class="ref">${ref[p.id]}</span><span class="chip acc">${esc(TYPES[p.type]||"Autre")}</span>${(p.type==="peage"||p.type==="parking")&&p.sens!=="na"?`<span class="chip">${p.sens==="retour"?"retour":"aller"}</span>`:""}${p.needsCheck?`<span class="chip warn">à vérifier</span>`:""}${p.doublon?`<span class="chip bad" title="Même date, heure et montant qu'un autre justificatif">doublon ?</span>`:""}<span class="amt">${p.montant!=null&&p.montant!==""?eur(p.montant):""}</span></div>
-      <div class="when">${p.date?fdate(p.date):"date ?"}${p.heure?" · "+esc(p.heure):""}</div>
-      <div class="desc">${esc(p.resume||p.emetteur||"")}</div>
-      <select data-assign="${p.id}" aria-label="Déplacement">${depOptions(f,isAssigned(p,f)?p.depId:"")}</select>
+      ${p.releve?`<div class="when">Relevé · ${lignesOk(p).length}/${p.lignes.length} lignes retenues · <b>${eur(lignesOk(p).reduce((a,l)=>a+l.montant,0))}</b></div>
+      <div class="desc">${esc(p.resume||"")}</div>
+      <button class="btn sm sec" data-act="editPiece" data-id="${p.id}">Choisir les lignes (${[...new Set(lignesOk(p).map(l=>l.depId))].map(id=>{const k=sortedDeps(f).findIndex(d=>d.id===id);return k>=0?"D"+(k+1):""}).filter(Boolean).join(", ")||"aucun déplacement"})</button>`
+      :`<div class="when">${p.date?fdate(p.date):"date ?"}${p.heure?" · "+esc(p.heure):""}</div>
+      <div class="desc">${esc(p.resume||p.emetteur||"")}${(p.liens||[]).length?` <span class="chip">sert aussi pour ${p.liens.length} autre${p.liens.length>1?"s":""}</span>`:""}</div>
+      <select data-assign="${p.id}" aria-label="Déplacement">${depOptions(f,isAssigned(p,f)?p.depId:"")}</select>`}
     </div></article>`;
 }
 function viewPieces(){
   const f=cur();const {ref}=pieceOrder(f);
   const jobs=st.jobs.map(j=>`<div class="job">${j.done?(j.error?"⚠️":"✓"):'<span class="spin"></span>'}<span style="flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap"><b>${esc(j.name)}</b> — ${esc(j.status)}</span></div>`).join("");
   const groups=[];
-  sortedDeps(f).forEach(d=>{const ps=f.pieces.filter(p=>p.depId===d.id);if(ps.length)groups.push([depLabel(d,f),eur(depCalc(d,f).total),ps])});
+  sortedDeps(f).forEach(d=>{const ps=f.pieces.filter(p=>principal(p,f)===d.id);if(ps.length)groups.push([depLabel(d,f),eur(depCalc(d,f).total),ps])});
   const au=f.pieces.filter(p=>p.depId==="autres");if(au.length)groups.push(["Autres frais","",au]);
   const un=f.pieces.filter(p=>!isAssigned(p,f));
   const byRef=(a,b)=>parseInt(ref[a.id].slice(1))-parseInt(ref[b.id].slice(1));
@@ -787,8 +839,8 @@ function checks(f){
     if(!dc.kmBrut&&!d.passager)out.push(["warn",lab+" : aucun kilomètre."]);
     if(d.mode!=="hab"&&(d.legs||[]).some(l=>l.km==null))out.push(["warn",lab+" : une étape n'a pas de kilomètres."]);
     if(d.passager&&!d.conducteur)out.push(["warn",lab+" : covoiturage, nom du conducteur non indiqué."]);
-    const ps=f.pieces.filter(x=>x.depId===d.id);
-    if(!ps.some(x=>x.type==="convocation"))out.push(["warn",lab+" : pas de convocation jointe."]);
+    const ps=piecesDe(f,d);
+    if(!ps.some(x=>x.type==="convocation"))out.push(["warn",lab+" : convocation ou mail justifiant le déplacement manquant (la trésorière le réclamera)."]);
     if(n(d.peageA)+n(d.peageR)>0&&!ps.some(x=>x.type==="peage"))out.push(["warn",lab+" : péages déclarés sans ticket."]);
     if(n(d.parkA)+n(d.parkR)>0&&!ps.some(x=>x.type==="parking"))out.push(["warn",lab+" : parking déclaré sans ticket."]);
     (d.repas||[]).filter(m=>!repasOk(m,f)).forEach(()=>out.push(["warn",lab+" : un repas sans ticket ne sera pas remboursé."]));
@@ -809,7 +861,7 @@ function mailText(f){
   L.push("Récapitulatif :");
   sortedDeps(f).forEach((d,k)=>{const dc=depCalc(d,f);const parts=[];
     if(dc.km)parts.push(`${kmTxt(dc.km)} = ${eur(dc.ik)}`);if(dc.peages)parts.push(`péages ${eur(dc.peages)}`);if(dc.parking)parts.push(`parking ${eur(dc.parking)}`);if(dc.repas)parts.push(`repas ${eur(dc.repas)}`);
-    const js=f.pieces.filter(x=>x.depId===d.id).map(x=>ref[x.id]);
+    const js=piecesDe(f,d).map(x=>ref[x.id]);
     L.push(`- D${k+1} ${fdate(d.date)} – ${motifTxt(d)}${trajetTxt(d)?" – "+trajetTxt(d):""} : ${parts.join(" + ")||"0"} → ${eur(dc.total)}${js.length?` (justif. ${js.join(", ")})`:""}`)});
   if(c.autres){const a=f.autres;const parts=[];if(n(a.postal))parts.push(`envois postaux ${eur(a.postal)}`);if(n(a.internet))parts.push(`internet/téléphonie ${eur(a.internet)}`);if(n(a.divers))parts.push(`divers${a.diversTxt?" ("+a.diversTxt+")":""} ${eur(a.divers)}`);L.push(`- Autres frais : ${parts.join(" + ")} → ${eur(c.autres)}`)}
   L.push("",`Total à rembourser : ${eur(c.total)}`,"");
@@ -818,7 +870,7 @@ function mailText(f){
 }
 function recapTable(f){
   const c=ficheCalc(f),{ref}=pieceOrder(f);
-  const rows=sortedDeps(f).map((d,i)=>{const dc=depCalc(d,f);const js=f.pieces.filter(x=>x.depId===d.id).map(x=>ref[x.id]);return `<tr><td class="num">D${i+1}</td><td class="num">${fdate(d.date)}</td><td>${esc(motifTxt(d))}</td><td>${esc(trajetTxt(d))}</td><td class="r num">${Math.round(dc.km*10)/10}</td><td class="r num">${eur(dc.ik)}</td><td class="r num">${eur(dc.peages)}</td><td class="r num">${eur(dc.parking)}</td><td class="r num">${dc.repas?eur(dc.repas):"—"}</td><td class="r num"><b>${eur(dc.total)}</b></td><td class="num small">${js.join(" ")}</td></tr>`}).join("");
+  const rows=sortedDeps(f).map((d,i)=>{const dc=depCalc(d,f);const js=piecesDe(f,d).map(x=>ref[x.id]);return `<tr><td class="num">D${i+1}</td><td class="num">${fdate(d.date)}</td><td>${esc(motifTxt(d))}</td><td>${esc(trajetTxt(d))}</td><td class="r num">${Math.round(dc.km*10)/10}</td><td class="r num">${eur(dc.ik)}</td><td class="r num">${eur(dc.peages)}</td><td class="r num">${eur(dc.parking)}</td><td class="r num">${dc.repas?eur(dc.repas):"—"}</td><td class="r num"><b>${eur(dc.total)}</b></td><td class="num small">${js.join(" ")}</td></tr>`}).join("");
   return `<div class="scroll-x"><table class="recap-table"><thead><tr><th>N°</th><th>Date</th><th>Motif</th><th>Trajet</th><th class="r">Km</th><th class="r">Indemn. km</th><th class="r">Péages</th><th class="r">Parking</th><th class="r">Repas</th><th class="r">Total</th><th>Justif.</th></tr></thead>
   <tbody>${rows||`<tr><td colspan="11" class="mut">Aucun déplacement.</td></tr>`}
   ${c.autres?`<tr><td></td><td></td><td colspan="7">Autres frais : ${[n(f.autres.postal)?"envois postaux "+eur(f.autres.postal):"",n(f.autres.internet)?"internet/téléphonie "+eur(f.autres.internet):"",n(f.autres.divers)?"divers "+(f.autres.diversTxt?"("+esc(f.autres.diversTxt)+") ":"")+eur(f.autres.divers):""].filter(Boolean).join(" · ")}</td><td class="r num"><b>${eur(c.autres)}</b></td><td class="num small">${f.pieces.filter(x=>x.depId==="autres").map(x=>ref[x.id]).join(" ")}</td></tr>`:""}</tbody>
@@ -959,8 +1011,9 @@ function voirFiche(id){
   const m=modal(`<div class="sheet" role="dialog" aria-modal="true" style="max-width:980px"><div class="sheet-head"><h3>${esc(i.prenom+" "+i.nom)} · ${esc(f.titre)} ${statutChip(f)}</h3><button class="btn sm sec" data-x="close">Fermer</button></div>
     <div class="small mut" style="margin-bottom:8px">${esc(i.fonction||"")} · ${esc(i.email||"")} · envoyée le ${fdate(f.envoyeLe)} · barème : ${esc(bareTxt(bareme(f.deps[0]&&f.deps[0].date)))}</div>
     ${recapTable(f)}
+    ${(()=>{const sans=sortedDeps(f).map((d,k)=>[d,k]).filter(([d])=>!piecesDe(f,d).some(x=>x.type==="convocation"));return sans.length?`<div class="fr-notice bad" style="margin-top:10px"><b>Justificatif du déplacement manquant</b> (convocation, mail…) pour : ${sans.map(([d,k])=>`D${k+1} du ${fdate(d.date)}`).join(", ")}.</div>`:""})()}
     <div class="fr-grid" style="margin-top:14px">
-      <label class="f c12"><span>Commentaire pour le déclarant</span><textarea id="trCom" rows="2">${esc(f.commentaire||"")}</textarea></label>
+      <label class="f c12"><span>Commentaire pour le déclarant</span><textarea id="trCom" rows="2">${esc(f.commentaire||(()=>{const sans=sortedDeps(f).map((d,k)=>[d,k]).filter(([d])=>!piecesDe(f,d).some(x=>x.type==="convocation"));return sans.length?"Merci de joindre la convocation (ou le mail) justifiant : "+sans.map(([d,k])=>`D${k+1} du ${fdate(d.date)}`).join(", ")+".":""})())}</textarea></label>
       <div class="c12 row"><button class="btn" data-x="valider" ${f.statut==="payee"?"disabled":""}>✓ Valider</button><button class="btn sec" data-x="corriger" ${f.statut==="payee"?"disabled":""}>À corriger</button>
       <span style="flex:1"></span><label class="f"><span>Payée le</span><input type="date" id="trDate" value="${esc(f.payeeLe||today())}"></label>${D.treso&&D.treso.comptes&&D.treso.comptes.length?`<label class="f"><span>Compte</span><select id="trCpt">${D.treso.comptes.map(x=>`<option value="${x.id}">${esc(x.nom)}</option>`).join("")}</select></label><label class="small" style="display:flex;gap:4px;align-items:center"><input type="checkbox" id="trEcr" ${f.ecritureId?"":"checked"}> écriture en trésorerie</label>`:""}<button class="btn" data-x="payer" ${f.statut==="payee"?"disabled":""}>€ Payée</button></div>
       <div class="c12 row"><button class="btn sm sec" data-x="pdf">${ICON.dl}PDF de la fiche</button><span class="small mut" id="trMsg"></span></div>
@@ -1062,6 +1115,13 @@ document.addEventListener("change",e=>{const t=e.target;
   if(t.dataset.tf){st.tf[t.dataset.tf]=t.value;renderView();return}
   if(t.dataset.bind)handleBind(t,true);
 });
+async function joindreConv(f,d,r){
+  if(typeof ReuDocs==="undefined")return false;
+  const doc=await ReuDocs.pdfConvocation(r,ME.pid?ReuDocs.personne({pid:ME.pid}):ReuDocs.personne({uid:ME.id}));const blob=doc.output("blob");
+  const pages=await pdfToCanvases(blob,2);const ids=[];for(const c of pages.pages)ids.push(await Store.putImage(await toBlob(c,"image/jpeg",.85)));
+  f.pieces.push(Object.assign(mkPiece({type:"convocation",date:r.date,resume:"Convocation – "+(r.titre||r.type||""),emetteur:"SNETAA-FO Orléans-Tours"},ids[0],FULL.map(p=>p.slice()),ids[0],{pages:ids,enhance:false,isDoc:true,nbPages:pages.total,keepSrc:true}),{depId:d.id,needsCheck:false}));
+  return true;
+}
 async function depuisReunion(rid){
   const r=(D.reunions||[]).find(x=>x.id===rid);if(!r)return;migrer();
   const f=ficheMois(String(r.date).slice(0,7),true);
@@ -1075,9 +1135,7 @@ async function depuisReunion(rid){
   else{const t=norm(r.lieu||"");const l=lieux().find(x=>t&&norm(x.nom)&&t.includes(norm(x.nom)));if(l)dest={k:"lieu",ref:l.id};else{const e=D.etablissements.find(x=>t&&x.nom&&t.includes(norm(x.nom)));dest=e?{k:"etab",ref:e.uai}:(r.lieu?{k:"adr",adr:String(r.lieu).replace(/\n/g,", ")}:null)}}
   d.pts=[dep].concat(dest?[dest]:[]);rebuildLegs(d);f.deps.push(d);
   // convocation générée par l'application, jointe comme justificatif
-  try{if(typeof ReuDocs!=="undefined"){const per=ME.pid&&P.get(ME.pid);const doc=await ReuDocs.pdfConvocation(r,per?ReuDocs.personne(per):null);const blob=doc.output("blob");
-    const pages=await pdfToCanvases(blob,2);const ids=[];for(const c of pages.pages)ids.push(await Store.putImage(await toBlob(c,"image/jpeg",.85)));
-    f.pieces.push(Object.assign(mkPiece({type:"convocation",date:r.date,resume:"Convocation – "+(r.titre||r.type||""),emetteur:"SNETAA-FO Orléans-Tours"},ids[0],FULL.map(p=>p.slice()),ids[0],{pages:ids,enhance:false,isDoc:true,nbPages:pages.total,keepSrc:true}),{depId:d.id,needsCheck:false}))}}catch(e){console.warn("convocation non jointe",e)}
+  try{await joindreConv(f,d,r)}catch(e){console.warn("convocation non jointe",e)}
   touch(f);st.cur=f.id;st.tab="deps";try{localStorage.setItem("fs-cur",f.id)}catch(_){}
   autoCalc(f,d);
 }
@@ -1093,10 +1151,14 @@ document.addEventListener("click",async e=>{
   const conf_=(sel,html)=>{const box=document.querySelector(sel);if(box)box.innerHTML=`<div class="confirm">${html}<button class="btn sm sec" data-act="cancelConfirm">Annuler</button></div>`};
   switch(a){
     case "newFiche":{const nf=newFiche();if(mine().some(x=>x.titre===nf.titre))nf.titre+=" (2)";all().push(nf);st.cur=nf.id;touch(nf);st.tab="deps";renderView();toast("Fiche « "+nf.titre+" » créée");break}
-    case "addDep":{const d=newDep(today());d.pts=[pr.depart==="monetab"&&pr.uai?{k:"etab",ref:pr.uai}:{k:"dom"}];f.deps.push(d);saveCur();renderView();setTimeout(()=>{const el=document.querySelector(`[data-dep="${d.id}"]`);el&&el.scrollIntoView({behavior:"smooth",block:"start"})},30);break}
+    case "toggleDep":{if(!st.open)st.open=new Set();st.open.has(id)?st.open.delete(id):st.open.add(id);renderView();break}
+    case "openAll":{st.open=new Set(f.deps.map(d=>d.id));renderView();break}
+    case "closeAll":{st.open=new Set();renderView();break}
+    case "convReu":{const d=f.deps.find(x=>x.id===id);const r=d&&(D.reunions||[]).find(x=>x.id===d.reunionId);if(!r)break;toast("Préparation de la convocation…");joindreConv(f,d,r).then(ok=>{if(ok){saveCur();renderView();toast("Convocation jointe")}}).catch(e=>toast("Convocation impossible : "+e.message));break}
+    case "addDep":{const d=newDep(today());if(!st.open)st.open=new Set();st.open.add(d.id);d.pts=[pr.depart==="monetab"&&pr.uai?{k:"etab",ref:pr.uai}:{k:"dom"}];f.deps.push(d);saveCur();renderView();setTimeout(()=>{const el=document.querySelector(`[data-dep="${d.id}"]`);el&&el.scrollIntoView({behavior:"smooth",block:"start"})},30);break}
     case "dupDep":{const s=f.deps.find(x=>x.id===id);const d=Object.assign(clone(s),{id:uid(),date:"",reunionId:"",repas:[]});f.deps.push(d);saveCur();renderView();toast("Déplacement dupliqué : indique la date");break}
     case "askDelDep":{const np=f.pieces.filter(p=>p.depId===id).length;conf_(`[data-confirm="${id}"]`,`<span>Supprimer ce déplacement ?${np?` Ses ${np} justificatif(s) repasseront « à affecter ».`:""}</span><button class="btn sm danger" data-act="delDep" data-id="${id}">Supprimer</button>`);break}
-    case "delDep":{f.deps=f.deps.filter(x=>x.id!==id);f.pieces.forEach(p=>{if(p.depId===id)p.depId=""});saveCur();renderView();break}
+    case "delDep":{f.deps=f.deps.filter(x=>x.id!==id);f.pieces.forEach(p=>{if(p.depId===id)p.depId="";if(p.liens)p.liens=p.liens.filter(x=>x!==id);(p.lignes||[]).forEach(l=>{if(l.depId===id){l.depId="";l.ok=false;l.manuel=true}})});saveCur();renderView();break}
     case "cancelConfirm":b.closest("[data-confirm]").innerHTML="";break;
     case "mode":{const d=f.deps.find(x=>x.id===id);d.mode=b.dataset.v;if(d.mode!=="hab")rebuildLegs(d);saveCur();renderView();break}
     case "addPt":{const d=f.deps.find(x=>x.id===id);d._addPt=1;renderView();break}
@@ -1196,6 +1258,7 @@ function assignPiece(pid,val){
   saveCur();renderView();
 }
 function autoAssign(f,p,preDep){
+  if(p.releve){p.depId="";if(preDep&&f.deps.some(d=>d.id===preDep))p.liens=[preDep];return}
   if(preDep){p.depId=preDep;return}
   if(!p.date){p.depId="";return}
   const same=f.deps.filter(d=>d.date===p.date);
@@ -1226,9 +1289,11 @@ async function ingest(files,preDep){
         upd("lecture du PDF…");const r=await pdfToCanvases(file);
         const ids=[];for(const c of r.pages){ids.push(await Store.putImage(await toBlob(c,"image/jpeg",.85)))}
         ids.forEach((id,i)=>srcCache.set(id,r.pages[i]));
-        let text=r.text;if(!text||text.replace(/\s/g,"").length<30){upd("lecture du texte de la page…");ocrLog=p=>{job.status=`lecture du texte… ${Math.round(p*100)} %`;const el=document.querySelector(".queue");if(el)renderView()};text=await ocrPlain(r.pages[0]);ocrLog=null}
+        let text=r.text,lignesT=r.lignes;if(!text||text.replace(/\s/g,"").length<30){upd("lecture du texte de la page…");ocrLog=p=>{job.status=`lecture du texte… ${Math.round(p*100)} %`;const el=document.querySelector(".queue");if(el)renderView()};const o=await ocrLignes(r.pages[0]);text=o.text;lignesT=o.lines;ocrLog=null}
         const a=parseText(text,true);if(!text)readOk=false;
-        made.push(mkPiece(a,ids[0],FULL.map(p=>p.slice()),ids[0],{pages:ids,enhance:false,isDoc:true,nbPages:r.total,keepSrc:true}));
+        const pc=mkPiece(a,ids[0],FULL.map(p=>p.slice()),ids[0],{pages:ids,enhance:false,isDoc:true,nbPages:r.total,keepSrc:true});
+        const rl=a.type!=="convocation"&&releveLignes(lignesT);if(rl)faireReleve(pc,rl);
+        made.push(pc);
       }else{
         const canvas=pageScan||await fileToCanvas(file);
         upd("enregistrement de l'original…");
@@ -1252,7 +1317,7 @@ async function ingest(files,preDep){
               if(b.connu||both.connu){const k=b.connu?b:both;a.type=k.type;a.emetteur=k.emetteur;a.sens=k.sens;a.connu=true}
               else if(a.type==="autre"&&b.type!=="autre"){a.type=b.type;a.emetteur=a.emetteur||b.emetteur}
               a.resume=[TYPES[a.type],a.emetteur].filter(Boolean).join(" – ");a.ocr=(a.ocr+"\n"+b.ocr).slice(0,3000);a.found=!!(a.date||a.montant)}}
-          const pc=mkPiece(a,srcId,q,await Store.putImage(await toBlob(rotCanvas(w0,o.rot),"image/jpeg",.86)),{rot:o.rot,enhance:true});pc._vide=a.type==="autre"&&!a.date&&a.montant==="";ici.push(pc);
+          const pc=mkPiece(a,srcId,q,await Store.putImage(await toBlob(rotCanvas(w0,o.rot),"image/jpeg",.86)),{rot:o.rot,enhance:true});{const rl=a.type!=="convocation"&&releveLignes(o.lines);if(rl)faireReleve(pc,rl)}pc._vide=a.type==="autre"&&!a.date&&a.montant==="";ici.push(pc);
         }
         // découpage en trop (logo, ombre, pli) : les morceaux sans rien de lisible sont écartés ; si tout est vide, on relit la photo comme un seul ticket
         if(quads.length>1&&!tcQuads){const pleins=ici.filter(x=>!x._vide);ici.filter(x=>x._vide).forEach(x=>Store.delImage(x.imgId));
@@ -1415,7 +1480,13 @@ async function openEditor(pid){
           <div class="c12 fr-notice info" style="display:flex;flex-direction:column;gap:6px"><label class="row small" style="gap:8px"><input type="checkbox" id="edLearn" ${p.lu&&p.lu.emetteur!==p.emetteur?"checked":""}> <b>Reconnaître automatiquement ce ticket la prochaine fois</b></label>
             <label class="f"><span>quand le ticket contient le mot (plusieurs : séparés par « ; »)</span><input type="text" id="edMot" value="${esc(motCle(p))}" placeholder="ex. COFIROUTE, HDU…"></label>
             <span class="small mut">→ émetteur, type et trajet ci-dessus seront repris d'office. Liste modifiable dans Réglages.</span></div>
-          <label class="f c12"><span>Déplacement</span><select id="edDep">${depOptions(f,isAssigned(p,f)?p.depId:"")}</select></label>
+          ${p.releve?`<div class="c12"><div class="eyebrow" style="margin-bottom:4px">Lignes du relevé : seules les lignes cochées comptent (rattachées d'office au déplacement de même date)</div>
+            <div class="tablewrap fr-rl"><table class="recap-table"><thead><tr><th></th><th>Date</th><th>Heure</th><th>Libellé</th><th class="num">Montant</th><th>Trajet</th><th>Déplacement</th></tr></thead><tbody>
+            ${p.lignes.map(l=>`<tr class="${l.ok!==false&&l.depId?"on":""}" data-l="${l.id}"><td><input type="checkbox" data-lk="ok" ${l.ok!==false&&l.depId?"checked":""} aria-label="Retenir"></td><td class="num">${fdate(l.date)}</td><td class="num">${esc(l.heure||"")}</td><td>${esc(l.libelle||"")}</td><td class="num">${eur(l.montant)}</td>
+              <td><select data-lk="sens">${selOpts([["aller","Aller"],["retour","Retour"]],l.sens||"aller")}</select></td><td><select data-lk="dep"><option value="">— aucun (trajet personnel) —</option>${sortedDeps(f).map(d=>`<option value="${d.id}" ${d.id===l.depId?"selected":""}>${esc(depLabel(d,f))}</option>`).join("")}</select></td></tr>`).join("")}
+            </tbody></table></div><div class="small">Retenu : <b>${eur(lignesOk(p).reduce((a,l)=>a+l.montant,0))}</b> sur ${eur(p.montant)} (${lignesOk(p).length} ligne${lignesOk(p).length>1?"s":""} sur ${p.lignes.length}). Les lignes retenues sont surlignées sur le PDF.</div></div>`
+          :`<label class="f c12"><span>Déplacement</span><select id="edDep">${depOptions(f,isAssigned(p,f)?p.depId:"")}</select></label>
+          ${f.deps.length>1?`<div class="c12"><div class="eyebrow" style="margin-bottom:4px">Sert aussi de justificatif pour (sans compter son montant deux fois)</div><div class="row" style="gap:10px">${sortedDeps(f).filter(d=>d.id!==p.depId).map(d=>`<label class="small" style="display:flex;gap:6px;align-items:center"><input type="checkbox" data-lien="${d.id}" ${(p.liens||[]).includes(d.id)?"checked":""}> ${esc(depLabel(d,f))}</label>`).join("")}</div></div>`:""}`}
         </div></fieldset>
         ${lk?"":`<div class="row" style="justify-content:space-between"><button class="btn sm ghost danger" data-ed="askDel">Supprimer</button><button class="btn" data-ed="save">Enregistrer</button></div>`}
         <div id="edConfirm"></div>
@@ -1460,13 +1531,15 @@ document.addEventListener("click",async e=>{
     b.disabled=true;b.textContent="Enregistrement…";
     const oldDep=p.depId;
     p.type=$("#edType").value;p.montant=$("#edMontant").value===""?"":r2(n($("#edMontant").value));p.date=$("#edDate").value;p.heure=$("#edHeure").value;p.resume=$("#edResume").value;p.emetteur=$("#edEmet").value;p.sens=$("#edSens").value;
-    let dv=$("#edDep").value;if(dv==="__new"){const d=newDep(p.date||today());f.deps.push(d);dv=d.id}p.depId=dv;
+    if(p.releve){$$("#frModal [data-l]").forEach(tr=>{const l=p.lignes.find(x=>x.id===tr.dataset.l);if(!l)return;const ok=tr.querySelector('[data-lk="ok"]').checked,dep=tr.querySelector('[data-lk="dep"]').value,se=tr.querySelector('[data-lk="sens"]').value;
+        if(ok!==(l.ok!==false&&!!l.depId)||dep!==(l.depId||"")){l.manuel=true}l.ok=ok&&!!dep;l.depId=dep;l.sens=se;if(ok&&!dep){const d=f.deps.find(x=>x.date===l.date);if(d){l.depId=d.id;l.ok=true}}})}
+    else{let dv=$("#edDep").value;if(dv==="__new"){const d=newDep(p.date||today());f.deps.push(d);dv=d.id}p.depId=dv;p.liens=$$("#frModal [data-lien]").filter(c=>c.checked&&c.dataset.lien!==dv).map(c=>c.dataset.lien)}
     {const L=$("#edLearn"),mot=($("#edMot")||{}).value||"";if(L&&L.checked&&mot.trim()&&p.emetteur.trim()){const nb=apprendre({mot:mot.trim(),emetteur:p.emetteur.trim(),type:p.type,sens:p.sens});setTimeout(()=>toast("Retenu : « "+mot.trim()+" » → "+p.emetteur.trim()+(nb?` · ${nb} autre${nb>1?"s":""} justificatif${nb>1?"s":""} mis à jour`:"")),300)}}
     p.needsCheck=false;p.doublon=doublons(f,p);
     try{
       if(ed.changed||ed.enhance!==(p.enhance!==false)){
         const src=await getSrcCanvas(p.srcId);const w=warp(src,ed.corners,ed.rot,ed.enhance);const nid=await Store.putImage(await toBlob(w,"image/jpeg",.86));
-        const old=p.imgId;p.imgId=nid;if(p.pages)p.pages[0]=nid;p.corners=ed.corners;p.rot=ed.rot;p.enhance=ed.enhance;if(old!==p.srcId)Store.delImage(old)}
+        const old=p.imgId;p.imgId=nid;if(ed.changed||ed.rot!==(p.rot||0))p.edite=true;if(p.pages)p.pages[0]=nid;p.corners=ed.corners;p.rot=ed.rot;p.enhance=ed.enhance;if(old!==p.srcId)Store.delImage(old)}
     }catch(e){console.error(e);toast("Détourage non enregistré : photo originale absente de cet appareil")}
     applyAuto(f,f.deps.find(d=>d.id===oldDep));applyAuto(f,f.deps.find(d=>d.id===p.depId));
     saveCur();closeEditor();renderView();toast("Justificatif enregistré");
@@ -1508,7 +1581,7 @@ async function makePdf(f,how,o={}){
     sortedDeps(f).forEach((d,i)=>{const dc=depCalc(d,f);
       doc.setFont("helvetica","normal");doc.setFontSize(8);
       const mot=doc.splitTextToSize(motifTxt(d)||"—",cols[2][1]-3),tr=doc.splitTextToSize(trajetTxt(d)||"—",cols[3][1]-3);
-      const js=f.pieces.filter(x=>x.depId===d.id).map(x=>ref[x.id]).join(" ");
+      const js=piecesDe(f,d).map(x=>ref[x.id]).join(" ");
       const lines=Math.max(mot.length,tr.length,1)+(js?1:0);const hRow=3.8*lines+3;
       if(y+hRow>270){doc.addPage();y=M;head()}
       const vals=[`D${i+1}`,fdate(d.date),mot,tr,String(Math.round(dc.km*10)/10),eurPdf(dc.ik),eurPdf(dc.peages),eurPdf(dc.parking),dc.repas?eurPdf(dc.repas):"—",eurPdf(dc.total)];
@@ -1531,9 +1604,14 @@ async function makePdf(f,how,o={}){
     if(sig){try{doc.addImage(sig,"PNG",M+2,sy+3,66,22)}catch(_){}}
     T(`Je certifie l'exactitude des frais déclarés. ${nm}, le ${fdate(f.dateDecl)}`,M,sy+33,{s:7,c:mute});
     // Justificatifs
-    const groups=[];sortedDeps(f).forEach((d,i)=>{const ps=list.filter(x=>x.depId===d.id);if(ps.length)groups.push([`D${i+1} · ${fdate(d.date)} · ${motifTxt(d)}${trajetTxt(d)?" · "+trajetTxt(d):""}`,ps,eurPdf(depCalc(d,f).total)])});
-    const au=list.filter(x=>x.depId==="autres");if(au.length)groups.push(["Autres frais",au,eurPdf(c.autres)]);
+    const groups=[];sortedDeps(f).forEach((d,i)=>{const ps=list.filter(x=>principal(x,f)===d.id);if(ps.length)groups.push([`D${i+1} · ${fdate(d.date)} · ${motifTxt(d)}${trajetTxt(d)?" · "+trajetTxt(d):""}`,ps,eurPdf(depCalc(d,f).total)])});
+    const au=list.filter(x=>principal(x,f)==="autres");if(au.length)groups.push(["Autres frais",au,eurPdf(c.autres)]);
     const un=list.filter(x=>!isAssigned(x,f));if(un.length)groups.push(["Justificatifs non affectés",un,""]);
+    // lignes retenues d'un relevé : surlignées en jaune, avec le numéro du déplacement
+    const numDep={};sortedDeps(f).forEach((d,i)=>numDep[d.id]="D"+(i+1));
+    const surligne=(pc,pi,x,y0,w,h)=>{if(!pc.releve||pc.edite)return;lignesOk(pc).filter(l=>l.b&&(l.pg||0)===pi).forEach(l=>{const [a,b,c2,d2]=l.b;
+      try{doc.saveGraphicsState();doc.setGState(new doc.GState({opacity:.35}));doc.setFillColor(255,221,0);doc.rect(x+a*w-.6,y0+b*h-.4,(c2-a)*w+1.2,(d2-b)*h+.8,"F");doc.restoreGraphicsState()}catch(_){}
+      T(numDep[l.depId]||"",Math.min(x+w-1,x+c2*w+2),y0+((b+d2)/2)*h+1.2,{b:1,s:7,c:[160,0,0]})})};
     let done=0;
     for(const [title,ps,tt] of groups){
       doc.addPage();y=M;T("PIÈCES JUSTIFICATIVES",M,y+4,{b:1,s:8,c:acc});y+=10;
@@ -1543,24 +1621,24 @@ async function makePdf(f,how,o={}){
       for(const pc of ps){
         msg.textContent=`Ajout des justificatifs… ${++done}/${list.length}`;
         const pages=pc.isDoc&&pc.pages&&pc.pages.length?pc.pages:[pc.imgId];
-        const cap=[`${ref[pc.id]} · ${TYPES[pc.type]}`,[pc.date?fdate(pc.date):"",pc.heure?pc.heure.replace(":","h"):""].filter(Boolean).join(" à "),pc.montant!==""&&pc.montant!=null?eurPdf(pc.montant):""].filter(Boolean).join("   ·   ");
+        const cap=[`${ref[pc.id]} · ${TYPES[pc.type]}`,[pc.date?fdate(pc.date):"",pc.heure?pc.heure.replace(":","h"):""].filter(Boolean).join(" à "),pc.releve?`relevé : ${eurPdf(lignesOk(pc).reduce((a,l)=>a+l.montant,0))} retenus (lignes surlignées) sur ${eurPdf(pc.montant)}`:pc.montant!==""&&pc.montant!=null?eurPdf(pc.montant):""].filter(Boolean).join("   ·   ");
         const sub=pc.resume||pc.emetteur||"";
         for(let pi=0;pi<pages.length;pi++){
           let im;try{im=await imgForPdf(pages[pi])}catch(_){im=null}
           if(!im){if(col===1){y+=rowH+6;col=0;rowH=0}if(y+20>284){doc.addPage();y=M}doc.setDrawColor(...line);doc.rect(M,y,W-2*M,16);T(cap,M+3,y+6,{b:1,s:8.5});T("Photo conservée sur l'appareil du déclarant : voir le PDF joint à son mail.",M+3,y+11,{s:7.5,c:mute});y+=21;continue}
           const ratio=im.h/im.w;
-          const wide=pc.isDoc||ratio<0.75;
+          const wide=pc.isDoc||pc.releve||ratio<0.75;
           if(wide){ if(col===1){y+=rowH+6;col=0;rowH=0}
             let w=W-2*M,h=w*ratio;const maxH=290-y-26;if(h>maxH&&maxH<90){doc.addPage();y=M}const avail=290-y-24;if(h>avail){h=avail;w=h/ratio}
             doc.setDrawColor(...line);doc.rect(M,y,W-2*M,h+15);T(cap+(pages.length>1?`   ·   page ${pi+1}/${pages.length}`:""),M+3,y+5,{b:1,s:8.5});if(sub)T(doc.splitTextToSize(sub,W-2*M-6)[0],M+3,y+9.5,{s:7.5,c:mute});
-            doc.addImage(im.url,"JPEG",M+(W-2*M-w)/2,y+12,w,h);y+=h+21;
+            doc.addImage(im.url,"JPEG",M+(W-2*M-w)/2,y+12,w,h);surligne(pc,pi,M+(W-2*M-w)/2,y+12,w,h);y+=h+21;
           }else{
             let w=colW-4,h=w*ratio;if(h>150){h=150;w=h/ratio}
             const boxH=h+17;if(col===0&&y+boxH>284){doc.addPage();y=M}
             if(col===1&&y+boxH>284){doc.addPage();y=M;col=0;rowH=0}
             const x0=M+col*(colW+6);doc.setDrawColor(...line);doc.rect(x0,y,colW,boxH);
             T(cap,x0+2.5,y+5,{b:1,s:8});if(sub)T(doc.splitTextToSize(sub,colW-5)[0],x0+2.5,y+9.3,{s:7,c:mute});
-            doc.addImage(im.url,"JPEG",x0+(colW-w)/2,y+13,w,h);
+            doc.addImage(im.url,"JPEG",x0+(colW-w)/2,y+13,w,h);surligne(pc,pi,x0+(colW-w)/2,y+13,w,h);
             rowH=Math.max(rowH,boxH);if(col===1){y+=rowH+6;col=0;rowH=0}else col=1;
           }
         }
